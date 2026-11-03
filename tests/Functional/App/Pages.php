@@ -1,0 +1,42 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Byfareska\StaticSite\Tests\Functional\App;
+
+use Byfareska\StaticSite\Page\PageProvider;
+use Byfareska\StaticSite\Page\RenderContext;
+use Byfareska\StaticSite\Page\SchedulesChanges;
+use Byfareska\StaticSite\Page\SitePage;
+use Byfareska\StaticSite\Redirect\Redirect;
+use Byfareska\StaticSite\Redirect\RedirectProvider;
+
+/**
+ * The home page, a page with the contact form (only while $withContact) and a moved article; $scheduledAt: a change
+ * to come (an article dated ahead).
+ */
+final class Pages implements PageProvider, RedirectProvider, SchedulesChanges
+{
+    public bool $withContact = false;
+
+    public ?\DateTimeImmutable $scheduledAt = null;
+
+    public function pages(RenderContext $context): iterable
+    {
+        yield new SitePage('index.html', 'home.html.twig', ['title' => 'Start']);
+        yield new SitePage('artykuly/pierwszy.html', 'home.html.twig', ['title' => 'Pierwszy']);
+        if ($this->withContact) {
+            yield new SitePage('kontakt/index.html', 'contact.html.twig');
+        }
+    }
+
+    public function redirects(): iterable
+    {
+        yield new Redirect('pierwszy.html', 'artykuly/pierwszy.html');
+    }
+
+    public function nextChangeAfter(\DateTimeImmutable $after): ?\DateTimeImmutable
+    {
+        return $this->scheduledAt !== null && $this->scheduledAt > $after ? $this->scheduledAt : null;
+    }
+}

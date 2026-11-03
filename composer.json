@@ -1,0 +1,85 @@
+{
+    "name": "byfareska/static-site-generator-bundle",
+    "description": "Symfony bundle that renders a site with Twig into static files and publishes them to named targets through Flysystem (local directory, FTP, SFTP), with texts kept in the database, publication history and rollback, and endpoints for the dynamic parts of the site.",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "keywords": [
+        "symfony",
+        "symfony-bundle",
+        "static-site-generator",
+        "flysystem",
+        "ftp",
+        "cms"
+    ],
+    "authors": [
+        {
+            "name": "Karol Szarafinowski",
+            "homepage": "https://github.com/byfareska"
+        }
+    ],
+    "require": {
+        "php": ">=8.4",
+        "doctrine/doctrine-bundle": "^3.0",
+        "doctrine/orm": "^3.5",
+        "league/flysystem": "^3.29",
+        "league/flysystem-local": "^3.29",
+        "psr/log": "^3.0",
+        "symfony/console": "^8.0",
+        "symfony/dependency-injection": "^8.0",
+        "symfony/event-dispatcher": "^8.0",
+        "symfony/filesystem": "^8.0",
+        "symfony/finder": "^8.0",
+        "symfony/form": "^8.0",
+        "symfony/framework-bundle": "^8.0",
+        "symfony/html-sanitizer": "^8.0",
+        "symfony/http-foundation": "^8.0",
+        "symfony/http-kernel": "^8.0",
+        "symfony/mime": "^8.0",
+        "symfony/rate-limiter": "^8.0",
+        "symfony/routing": "^8.0",
+        "symfony/string": "^8.0",
+        "symfony/translation": "^8.0",
+        "symfony/twig-bundle": "^8.0",
+        "symfony/validator": "^8.0",
+        "twig/twig": "^3.21"
+    },
+    "require-dev": {
+        "byfareska/crud": "dev-master",
+        "league/flysystem-ftp": "^3.29",
+        "league/flysystem-sftp-v3": "^3.29",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0",
+        "symfony/asset": "^7.4|^8.0",
+        "symfony/browser-kit": "^8.0",
+        "symfony/messenger": "^8.0",
+        "symfony/property-access": "^8.0",
+        "symfony/scheduler": "^7.4|^8.0",
+        "symfony/security-core": "^8.0",
+        "symfony/serializer": "^8.0",
+        "symfony/yaml": "^8.0"
+    },
+    "suggest": {
+        "league/flysystem-ftp": "For ftp:// and ftps:// targets",
+        "league/flysystem-sftp-v3": "For sftp:// targets",
+        "symfony/messenger": "To publish in a worker (publish.mode: messenger) and to send submissions on",
+        "symfony/scheduler": "A worker publishes scheduled content by itself (consume scheduler_static_site)",
+        "symfony/rate-limiter": "Rate limits of the endpoints (#[AsSiteEndpoint(rateLimit: ...)])",
+        "symfony/asset": "The stylesheet of the editor (editor.content_css) as a versioned asset",
+        "byfareska/crud": "For the pages of the site in the admin panel: publications, texts, submissions"
+    },
+    "autoload": {
+        "psr-4": {
+            "Byfareska\\StaticSite\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Byfareska\\StaticSite\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}

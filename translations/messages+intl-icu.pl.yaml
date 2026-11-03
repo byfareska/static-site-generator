@@ -1,0 +1,89 @@
+static_site:
+    nav:
+        section: Strona
+        texts: Teksty
+    status:
+        pending: Czeka w kolejce
+        building: Budowanie…
+        deploying: Wysyłanie…
+        done: Opublikowano
+        failed: Błąd publikacji
+    submission:
+        new: Nowe
+        handled: Obsłużone
+        spam: Spam
+    publish:
+        button: Opublikuj
+        unpublished: Nieopublikowane zmiany
+        all_outdated: 'Wszystkie ze zmianami ({count})'
+        nothing: Wszystkie cele są aktualne.
+        requested: 'Zlecono publikację #{id}.'
+        already_running: 'Trwa publikacja #{id}. Poczekaj, aż się skończy.'
+    target:
+        never: Jeszcze nie publikowano
+        incomplete: Ostatnia wysyłka nie skończyła się
+        changed: 'Zmiany od {at, date, short} {at, time, short}'
+        current: 'Aktualny ({at, date, short} {at, time, short})'
+        scheduled: 'zaplanowana zmiana {at, date, short} {at, time, short}'
+    preview:
+        title: Podgląd
+        live: Podgląd strony
+        drafts: Podgląd ze szkicami
+    widget:
+        title: Publikacja strony
+        description: Stan celów publikacji i ostatnie publikacje.
+        empty: Jeszcze nic nie opublikowano.
+    texts:
+        none: Aplikacja nie ma katalogu tekstów (TextCatalog).
+        save: Zapisz
+        saved: Zapisano teksty. Zmiany pojawią się na stronie po publikacji.
+        after_save: Zmiany pojawią się na stronie po publikacji.
+        placeholders: Znaczniki
+        placeholders_help: Wpisane w tekst zostaną zastąpione wartością.
+        groups: Grupy tekstów
+crud:
+    site_publication:
+        title: Publikacje
+        new: Nowa publikacja
+        edit: Publikacja
+        palette:
+            keywords: publikacja historia przywróć wdrożenie ftp
+        field:
+            id: { name: Nr }
+            status: { name: Stan }
+            targets: { name: Cele }
+            requestedBy: { name: Zlecił }
+            createdAt: { name: Zlecono }
+            startedAt: { name: Rozpoczęto }
+            finishedAt: { name: Zakończono }
+            buildId: { name: Wersja plików }
+            rollbackOf: { name: Przywrócenie publikacji }
+            fileCount: { name: Plików }
+            uploaded: { name: Wysłano }
+            deleted: { name: Usunięto }
+            log: { name: Przebieg }
+        action:
+            rollback: Przywróć tę wersję
+            rollback_hint: Wyśle pliki tej publikacji bez budowania strony od nowa.
+            rollback_target: Na który cel?
+            retry: Ponów
+            retry_question: Ponowić publikację na te same cele?
+    site_submission:
+        title: Zgłoszenia
+        palette:
+            keywords: zgłoszenia formularz kontakt wiadomości
+        field:
+            endpoint: { name: Formularz }
+            status: { name: Stan }
+            data: { name: Treść }
+            createdAt: { name: Wysłano }
+            handledAt: { name: Obsłużono }
+            page: { name: Strona }
+            note: { name: Notatka }
+            userAgent: { name: Przeglądarka }
+            senderHash: { name: Nadawca (skrót) }
+        action:
+            handled: Obsłużone
+            note: Notatka (opcjonalnie)
+            spam: Spam
+            spam_question: Oznaczyć jako spam?

@@ -1,0 +1,89 @@
+static_site:
+    nav:
+        section: Site
+        texts: Texts
+    status:
+        pending: Waiting
+        building: Building…
+        deploying: Sending…
+        done: Published
+        failed: Publication failed
+    submission:
+        new: New
+        handled: Handled
+        spam: Spam
+    publish:
+        button: Publish
+        unpublished: Unpublished changes
+        all_outdated: 'All with changes ({count})'
+        nothing: Every target is up to date.
+        requested: 'Publication #{id} requested.'
+        already_running: 'Publication #{id} is running. Wait until it ends.'
+    target:
+        never: Never published
+        incomplete: The last upload did not finish
+        changed: 'Changed since {at, date, short} {at, time, short}'
+        current: 'Up to date ({at, date, short} {at, time, short})'
+        scheduled: 'a change scheduled for {at, date, short} {at, time, short}'
+    preview:
+        title: Preview
+        live: Preview the site
+        drafts: Preview with drafts
+    widget:
+        title: Site publication
+        description: The state of the targets and the last publications.
+        empty: Nothing published yet.
+    texts:
+        none: The application has no catalog of texts (TextCatalog).
+        save: Save
+        saved: The texts are saved. The site shows them after the next publication.
+        after_save: The site shows the changes after the next publication.
+        placeholders: Placeholders
+        placeholders_help: Typed into a text, they are replaced by their value.
+        groups: Groups of texts
+crud:
+    site_publication:
+        title: Publications
+        new: New publication
+        edit: Publication
+        palette:
+            keywords: publication history rollback deploy ftp
+        field:
+            id: { name: No. }
+            status: { name: Status }
+            targets: { name: Targets }
+            requestedBy: { name: Requested by }
+            createdAt: { name: Requested }
+            startedAt: { name: Started }
+            finishedAt: { name: Finished }
+            buildId: { name: Build }
+            rollbackOf: { name: Rollback of }
+            fileCount: { name: Files }
+            uploaded: { name: Sent }
+            deleted: { name: Deleted }
+            log: { name: Log }
+        action:
+            rollback: Roll back to this version
+            rollback_hint: Sends the files of this publication without building the site again.
+            rollback_target: To which target?
+            retry: Retry
+            retry_question: Publish to the same targets again?
+    site_submission:
+        title: Submissions
+        palette:
+            keywords: submissions form contact messages
+        field:
+            endpoint: { name: Form }
+            status: { name: Status }
+            data: { name: Content }
+            createdAt: { name: Sent }
+            handledAt: { name: Handled }
+            page: { name: Page }
+            note: { name: Note }
+            userAgent: { name: Browser }
+            senderHash: { name: Sender (hash) }
+        action:
+            handled: Handled
+            note: Note (optional)
+            spam: Spam
+            spam_question: Mark as spam?

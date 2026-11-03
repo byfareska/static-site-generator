@@ -1,0 +1,43 @@
+{# The state of the targets and the last publications (StaticSite:StatusWidget). #}
+{#- read here: inside <twig:Ui:Widget>, "this" is that component #}
+{%- set targets = this.targets %}
+{%- set last = this.last %}
+<div {{ attributes.defaults({style: 'height: 100%'}) }}>
+    <twig:Ui:Widget :title="'static_site.widget.title'|trans" icon="cloud-upload" accent="#0ea5e9"
+                    :href="path('crud_site_publication_list')" :link="'crud.site_publication.title'|trans">
+        <ul class="flex flex-col gap-1 text-sm">
+            {% for name, status in targets %}
+                <li class="flex items-center gap-2">
+                    {% if status.deployedAt is null %}
+                        <span class="badge badge-ghost badge-xs"></span>
+                    {% elseif status.needsPublication %}
+                        <span class="badge badge-warning badge-xs"></span>
+                    {% else %}
+                        <span class="badge badge-success badge-xs"></span>
+                    {% endif %}
+                    <span class="font-medium">{{ status.target.label }}</span>
+                    <span class="ms-auto text-xs text-base-content/60">
+                        {%- if status.deployedAt is null -%}
+                            {{ 'static_site.target.never'|trans }}
+                        {%- elseif status.needsPublication -%}
+                            {{ 'static_site.target.changed'|trans({at: status.deployedAt|crud_wall_clock}) }}
+                        {%- else -%}
+                            {{ 'static_site.target.current'|trans({at: status.deployedAt|crud_wall_clock}) }}
+                        {%- endif -%}
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+        {% set items = [] %}
+        {% for publication in last %}
+            {% set items = items|merge([{
+                title: '#' ~ publication.id ~ ' · ' ~ publication.targets|join(', '),
+                meta: ('static_site.status.' ~ publication.status.value)|trans,
+                time: 'crud.value.datetime'|trans({at: publication.createdAt|crud_wall_clock}),
+                href: path('crud_site_publication_show', {id: publication.id}),
+                icon: publication.status.value == 'failed' ? 'x-circle' : (publication.status.value == 'done' ? 'check2-circle' : 'hourglass-split'),
+            }]) %}
+        {% endfor %}
+        <twig:Ui:WidgetList :items="items" :empty="'static_site.widget.empty'|trans" class="mt-2 flex flex-col gap-0.5" />
+    </twig:Ui:Widget>
+</div>

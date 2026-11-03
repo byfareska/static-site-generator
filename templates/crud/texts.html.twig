@@ -1,0 +1,52 @@
+{# A group of texts of the site (TextsController). #}
+{% extends '@CrudTheme/panel/layout.html.twig' %}
+
+{% block page_title %}{{ group ? group.label : 'static_site.nav.texts'|trans }}{% endblock %}
+
+{% block content %}
+    <twig:Ui:PageHead :title="group ? group.label : 'static_site.nav.texts'|trans" :subtitle="group ? group.description : null" />
+
+    {% if group is null %}
+        <twig:Ui:EmptyState icon="fonts" :title="'static_site.texts.none'|trans" />
+    {% else %}
+        <div class="grid gap-6 lg:grid-cols-[1fr_18rem]">
+            <div class="card card-border bg-base-100">
+                <div class="card-body">
+                    {{ form_start(form) }}
+                    {{ form_widget(form) }}
+                    <div class="mt-4 flex items-center gap-3">
+                        <button type="submit" class="btn btn-primary">{{ crud_icon('check2') }} {{ 'static_site.texts.save'|trans }}</button>
+                        <span class="text-sm text-base-content/60">{{ 'static_site.texts.after_save'|trans }}</span>
+                    </div>
+                    {{ form_end(form) }}
+                </div>
+            </div>
+            <aside class="flex flex-col gap-4 text-sm">
+                {% if placeholders is not empty %}
+                    <div class="card card-border bg-base-100">
+                        <div class="card-body p-4">
+                            <h2 class="font-semibold">{{ 'static_site.texts.placeholders'|trans }}</h2>
+                            <p class="text-base-content/60">{{ 'static_site.texts.placeholders_help'|trans }}</p>
+                            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                                {% for name, placeholder in placeholders %}
+                                    <dt><code>{{ '{' ~ name ~ '}' }}</code></dt>
+                                    <dd class="text-base-content/70">{{ placeholder.description ?: placeholder.value }}</dd>
+                                {% endfor %}
+                            </dl>
+                        </div>
+                    </div>
+                {% endif %}
+                <div class="card card-border bg-base-100">
+                    <div class="card-body p-4">
+                        <h2 class="font-semibold">{{ 'static_site.texts.groups'|trans }}</h2>
+                        <ul class="menu w-full p-0">
+                            {% for key, other in groups %}
+                                <li><a href="{{ path('static_site_texts_group', {group: key}) }}" class="{{ key == group.key ? 'menu-active' }}">{{ other.label }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    {% endif %}
+{% endblock %}

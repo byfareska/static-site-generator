@@ -1,0 +1,70 @@
+{#
+    The "publish" button of the top bar (StaticSite:PublishButton). Drawn again every two seconds while a publication
+    runs. daisyUI classes; another theme of the panel overrides this template (templates/bundles/StaticSiteBundle/).
+#}
+{% set active = this.active %}
+{% set outdated = this.outdated %}
+{% set finished = this.finished %}
+{% set targets = this.targets %}
+<div {{ attributes.defaults(active ? {class: 'flex items-center gap-2', 'data-poll': 'delay(2000)|$render'} : {class: 'flex items-center gap-2'}) }}>
+    {% if active %}
+        {% set show = this.url('crud_site_publication_show', {id: active.id}) %}
+        <a class="badge badge-info gap-1" {% if show %}href="{{ show }}"{% endif %}>
+            <span class="loading loading-spinner loading-xs"></span>
+            {{ ('static_site.status.' ~ active.status.value)|trans }}
+        </a>
+    {% elseif finished %}
+        {% set show = this.url('crud_site_publication_show', {id: finished.id}) %}
+        <a class="badge {{ finished.status.value == 'done' ? 'badge-success' : 'badge-error' }}" {% if show %}href="{{ show }}"{% endif %}>
+            {{ ('static_site.status.' ~ finished.status.value)|trans }}
+        </a>
+    {% elseif outdated is not empty %}
+        <span class="badge badge-warning badge-soft hidden sm:inline-flex">{{ 'static_site.publish.unpublished'|trans }}</span>
+    {% endif %}
+    {% if this.error %}<span class="text-xs text-error">{{ this.error }}</span>{% endif %}
+
+    {% set live = this.url('static_site_preview', {mode: 'live', path: ''}) %}
+    {% if live %}
+        <a class="btn btn-ghost btn-sm" href="{{ live }}" target="_blank" rel="noopener" title="{{ 'static_site.preview.live'|trans }}">{{ crud_icon('eye') }}</a>
+    {% endif %}
+
+    <details class="dropdown dropdown-end">
+        <summary class="btn btn-sm {{ outdated is not empty ? 'btn-primary' : 'btn-ghost' }}"{% if active %} disabled{% endif %}>
+            {{ crud_icon('cloud-upload') }} <span class="hidden sm:inline">{{ 'static_site.publish.button'|trans }}</span>
+        </summary>
+        <ul class="menu dropdown-content z-50 mt-2 w-80 rounded-box bg-base-100 p-2 shadow-lg">
+            {% if outdated|length > 1 %}
+                <li>
+                    <button type="button" data-action="live#action" data-live-action-param="publish" data-live-target-param="*">
+                        {{ crud_icon('cloud-upload') }} {{ 'static_site.publish.all_outdated'|trans({count: outdated|length}) }}
+                    </button>
+                </li>
+            {% endif %}
+            {% for name, status in targets %}
+                <li>
+                    <button type="button" class="flex flex-col items-start gap-0" data-action="live#action" data-live-action-param="publish" data-live-target-param="{{ name }}">
+                        <span class="font-medium">{{ status.target.label }}</span>
+                        <span class="text-xs text-base-content/60">
+                            {%- if status.deployedAt is null -%}
+                                {{ 'static_site.target.never'|trans }}
+                            {%- elseif status.isIncomplete -%}
+                                {{ 'static_site.target.incomplete'|trans }}
+                            {%- elseif status.needsPublication -%}
+                                {{ 'static_site.target.changed'|trans({at: status.deployedAt|crud_wall_clock}) }}
+                            {%- else -%}
+                                {{ 'static_site.target.current'|trans({at: status.deployedAt|crud_wall_clock}) }}
+                            {%- endif -%}
+                            {%- if status.scheduledChange -%} · {{ 'static_site.target.scheduled'|trans({at: status.scheduledChange|crud_wall_clock}) }}{%- endif -%}
+                        </span>
+                    </button>
+                </li>
+            {% endfor %}
+            {% set drafts = this.url('static_site_preview', {mode: 'drafts', path: ''}) %}
+            {% if drafts %}
+                <li class="menu-title mt-1">{{ 'static_site.preview.title'|trans }}</li>
+                <li><a href="{{ live }}" target="_blank" rel="noopener">{{ crud_icon('eye') }} {{ 'static_site.preview.live'|trans }}</a></li>
+                <li><a href="{{ drafts }}" target="_blank" rel="noopener">{{ crud_icon('pencil-square') }} {{ 'static_site.preview.drafts'|trans }}</a></li>
+            {% endif %}
+        </ul>
+    </details>
+</div>
