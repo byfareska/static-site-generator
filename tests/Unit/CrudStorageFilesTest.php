@@ -4,13 +4,25 @@ declare(strict_types=1);
 
 namespace Byfareska\StaticSite\Tests\Unit;
 
+use Byfareska\Crud\Files\FileLibraries;
+use Byfareska\Crud\Files\FileReference;
 use Byfareska\Crud\Files\FileStorages;
+use Byfareska\Crud\Files\FileUsages;
+use Byfareska\Crud\Files\NoFileLibrary;
 use Byfareska\Crud\Files\Flysystem\FlysystemFileStorage;
 use Byfareska\Crud\Files\StorageFileUrls;
+use Byfareska\StaticSite\Content\ContentChanges;
+use Byfareska\StaticSite\Content\SiteSettings;
+use Byfareska\StaticSite\File\SiteFile;
+use Byfareska\StaticSite\Integration\Crud\CrudLibraryFiles;
 use Byfareska\StaticSite\Integration\Crud\CrudStorageFiles;
+use Doctrine\ORM\EntityManagerInterface;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\DependencyInjection\Container;
+use Symfony\Component\DependencyInjection\ParameterBag\ContainerBag;
+use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\DependencyInjection\ServiceLocator;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\UriSigner;
@@ -93,6 +105,56 @@ final class CrudStorageFilesTest extends TestCase
         $this->expectException(\LogicException::class);
         $this->expectExceptionMessage('"gone"');
         (new CrudStorageFiles(['gone' => 'old'], $this->storages))->fromReference('gone://a.jpg');
+    }
+
+    public function testEveryFileOfAStoragePublishedWholeIsAFileOfTheSite(): void
+    {
+        $all = $this->allFiles(['public' => true]);
+
+        self::assertSame(['uploads/ab/cd/x.jpg'], array_keys($all), 'Listed by the storage: its library ("none") cannot.');
+        self::assertSame('JPEG', $all['uploads/ab/cd/x.jpg']->read());
+        self::assertSame([], $this->allFiles(['public' => false]), 'Only the files the pages use.');
+        self::assertSame([], $this->allFiles([]), 'No storage published.');
+    }
+
+    public function testAFreshUploadNoRecordUsesIsLeftOut(): void
+    {
+        $usages = $this->createStub(FileUsages::class);
+        $usages->method('tracks')->willReturn(true);
+        $usages->method('used')->willReturn([]);
+        self::assertSame([], $this->allFiles(['public' => true], $usages, 'PT24H'), 'Uploaded a moment ago: a form not saved.');
+        self::assertCount(1, $this->allFiles(['public' => true], $usages), 'Without prune_after nothing is left out.');
+
+        $usages = $this->createStub(FileUsages::class);
+        $usages->method('tracks')->willReturn(true);
+        $usages->method('used')->willReturn([FileReference::parse('public://ab/cd/x.jpg')]);
+        self::assertCount(1, $this->allFiles(['public' => true], $usages, 'PT24H'), 'A record uses it.');
+    }
+
+    /**
+     * @param array<string, bool> $publishAll
+     *
+     * @return array<string, SiteFile> by path
+     */
+    private function allFiles(array $publishAll, ?FileUsages $usages = null, ?string $pruneAfter = null): array
+    {
+        $libraries = new FileLibraries(new ServiceLocator([
+            'public' => static fn () => new NoFileLibrary(),
+            'cdn' => static fn () => new NoFileLibrary(),
+            'private' => static fn () => new NoFileLibrary(),
+        ]));
+        $parameters = new ContainerBag(new Container(new ParameterBag(
+            $pruneAfter === null ? [] : ['byfareska_crud.files.prune_after' => $pruneAfter],
+        )));
+        $em = $this->createStub(EntityManagerInterface::class);
+        $settings = new SiteSettings($em, new ContentChanges($em));
+        $files = new CrudLibraryFiles($this->files(), $settings, $publishAll, $parameters, $this->storages, $libraries, $usages);
+        $all = [];
+        foreach ($files->allFiles() as $file) {
+            $all[$file->path] = $file;
+        }
+
+        return $all;
     }
 
     private function files(): CrudStorageFiles

@@ -1,0 +1,21 @@
+{# The settings of the site (SettingsController). #}
+{% extends '@CrudTheme/panel/layout.html.twig' %}
+
+{% block page_title %}{{ 'static_site.nav.settings'|trans }}{% endblock %}
+
+{% block content %}
+    <twig:Ui:PageHead :title="'static_site.nav.settings'|trans" />
+
+    <div class="card card-border bg-base-100 max-w-2xl">
+        <div class="card-body">
+            {% form_theme form with crud_form_themes() %}
+            {{ form_start(form) }}
+            {{ form_widget(form) }}
+            <div class="mt-4 flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">{{ crud_icon('check2') }} {{ 'static_site.texts.save'|trans }}</button>
+                <span class="text-sm text-base-content/60">{{ 'static_site.texts.after_save'|trans }}</span>
+            </div>
+            {{ form_end(form) }}
+        </div>
+    </div>
+{% endblock %}

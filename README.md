@@ -312,15 +312,17 @@ static_site_panel:
 
 It adds: the button "Publish" with the targets and the state of each (top bar), the resource "Publications" (log,
 rollback to a target, retry), the dashboard widget, "Texts" with a page per group of the catalog, the preview
-(`/admin/podglad/live/`, `/admin/podglad/drafts/`), and "Submissions" when the site has endpoints.
+(`/admin/podglad/live/`, `/admin/podglad/drafts/`), "Submissions" when the site has endpoints, and "Site settings"
+(`/admin/ustawienia-strony`) when it publishes uploaded files (see "Files").
 Translations: Polish and English.
 
 ## Files
 
-Files uploaded in the panel of byfareska/crud (`byfareska_crud.files`) are published with the site - only those its
-pages use: a field of files shown with `site_file()`, a text of the type `image` / `file` (`t_file()`), an image or a
-link of the HTML of the editor (`t_html`, `|rich`, `|site_links`). A file uploaded and never shown, or shown only by a
-draft, stays in the panel.
+Files uploaded in the panel of byfareska/crud (`byfareska_crud.files`) are published with the site: by default every
+file of the storages of `static_site.files.storages`, or - the checkbox "Publish every file of the library" of "Site
+settings" in the panel unticked - only those its pages use: a field of files shown with `site_file()`, a text of the
+type `image` / `file` (`t_file()`), an image or a link of the HTML of the editor (`t_html`, `|rich`, `|site_links`); a
+file uploaded and never shown, or shown only by a draft, then stays in the panel.
 
 ```yaml
 # config/packages/byfareska_crud.yaml
@@ -333,8 +335,18 @@ byfareska_crud:
 static_site:
     files:
         storages: { public: uploads }    # public://ab/cd/x.jpg is uploads/ab/cd/x.jpg of the site
+        publish_all: true                # the default of the checkbox of the panel (kept in static_site_state)
         editor: true                     # the editor uploads into the first of them; false, or {storage, accept, max_size}
+        # a storage the checkbox does not change: storages: { public: uploads, docs: { dir: pliki, publish_all: false } }
 ```
+
+Ticking or unticking the checkbox is a change of the site: the targets show it as unpublished. The list of every file is
+the library of the storage (`byfareska_crud.files.storages.<name>.library`): the table `crud_file` of the library
+`doctrine`, the storage listed for `storage` and `none`. A file uploaded less than `byfareska_crud.files.prune_after`
+ago that no record uses is left out - the upload of a form not saved yet - as is a file of the library whose bytes
+cannot be read (noted in the log). A file deleted from the library is deleted from the targets at the next publication,
+like any file the bundle wrote. Each build copies every file of the storages into its directory; the targets get only
+those that changed.
 
 ```php
 #[ORM\Column(nullable: true)]
@@ -352,7 +364,8 @@ writes them as paths of the site, relative to the page. The preview serves the f
 texts are told to crud's index of usages (resource `static_site_text`), so `byfareska:crud:files:prune` keeps them.
 
 Another source of files the pages use (a DAM, generated images) is a `SiteFileResolver`: a reference or an address to
-a `SiteFile` (`SiteFile::stream($path, fn () => $stream)`), and a path back to it for the preview.
+a `SiteFile` (`SiteFile::stream($path, fn () => $stream)`), and a path back to it for the preview. A source whose files
+are all published, used or not, is a `SiteFileLibrary` (`allFiles()`).
 
 ## Endpoints
 

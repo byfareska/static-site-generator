@@ -81,29 +81,43 @@ final class StaticSiteBundle extends AbstractBundle
                     ->end()
                 ->end()
                 ->arrayNode('files')
-                    ->info('Files uploaded in the panel (byfareska_crud.files): published with the site when its pages use them.')
+                    ->info('Files uploaded in the panel (byfareska_crud.files): published with the site, all of them or those its pages use.')
                     ->addDefaultsIfNotSet()
                     ->children()
                         ->arrayNode('storages')
-                            ->info('The storages of byfareska/crud the site takes files from, and its directory each goes to: {public: uploads}.')
+                            ->info('The storages of byfareska/crud the site takes files from, and its directory each goes to: {public: uploads}, or {public: {dir: uploads, publish_all: false}}.')
                             ->useAttributeAsKey('name')
-                            ->scalarPrototype()
-                                ->cannotBeEmpty()
-                                ->beforeNormalization()->ifString()->then(static fn (string $dir): string => trim($dir, '/'))->end()
-                                ->validate()
-                                    ->ifTrue(static function (string $dir): bool {
-                                        try {
-                                            SitePaths::assertValid($dir);
+                            ->arrayPrototype()
+                                ->beforeNormalization()->ifString()->then(static fn (string $dir): array => ['dir' => $dir])->end()
+                                ->children()
+                                    ->scalarNode('dir')
+                                        ->isRequired()
+                                        ->cannotBeEmpty()
+                                        ->beforeNormalization()->ifString()->then(static fn (string $dir): string => trim($dir, '/'))->end()
+                                        ->validate()
+                                            ->ifTrue(static function (mixed $dir): bool {
+                                                try {
+                                                    SitePaths::assertValid((string) $dir);
 
-                                            return false;
-                                        } catch (\InvalidArgumentException) {
-                                            return true;
-                                        }
-                                    })
-                                    ->thenInvalid('%s is not a directory of the site (relative to its root, without "..").')
+                                                    return false;
+                                                } catch (\InvalidArgumentException) {
+                                                    return true;
+                                                }
+                                            })
+                                            ->thenInvalid('%s is not a directory of the site (relative to its root, without "..").')
+                                        ->end()
+                                    ->end()
+                                    ->booleanNode('publish_all')
+                                        ->info('Every file of this storage published (true) or only those the pages use (false), whatever the panel says; default: the setting of the panel.')
+                                        ->defaultNull()
+                                    ->end()
                                 ->end()
                             ->end()
                             ->defaultValue([])
+                        ->end()
+                        ->booleanNode('publish_all')
+                            ->info('Publish every file of the storages, used by a page or not (false: only those the pages use): the default of the setting in the panel.')
+                            ->defaultTrue()
                         ->end()
                         ->variableNode('editor')
                             ->info('Uploads into the editor: true (into the first of "storages"), false, or {storage, accept, max_size}.')
@@ -238,7 +252,7 @@ final class StaticSiteBundle extends AbstractBundle
      *     htaccess: bool,
      *     clean_urls: bool,
      *     markdown: array{enabled: bool, selector: string, exclude: list<string>, llms_txt: bool},
-     *     files: array{storages: array<string, string>, editor: bool|array<string, mixed>},
+     *     files: array{storages: array<string, array{dir: string, publish_all: bool|null}>, publish_all: bool, editor: bool|array<string, mixed>},
      *     targets: array<string, array{label: string|null, dsn: string|null, service: string|null, strategy: string, backend: bool}>,
      *     publish: array{mode: string|null, schedule_every: string},
      *     sync: array{batch: int},
@@ -263,7 +277,15 @@ final class StaticSiteBundle extends AbstractBundle
         $parameters->set('static_site.markdown.selector', $config['markdown']['selector']);
         $parameters->set('static_site.markdown.exclude', $config['markdown']['exclude']);
         $parameters->set('static_site.markdown.llms_txt', $config['markdown']['llms_txt']);
-        $parameters->set('static_site.files.storages', $config['files']['storages']);
+        $parameters->set('static_site.files.storages', array_map(
+            static fn (array $storage): string => $storage['dir'],
+            $config['files']['storages'],
+        ));
+        $parameters->set('static_site.files.publish_all', $config['files']['publish_all']);
+        $parameters->set('static_site.files.storages_publish_all', array_map(
+            static fn (array $storage): ?bool => $storage['publish_all'],
+            $config['files']['storages'],
+        ));
         $parameters->set('static_site.files.editor', self::editorFiles($config['files']));
         $parameters->set('static_site.targets', $config['targets']);
         $parameters->set(
@@ -326,6 +348,7 @@ final class StaticSiteBundle extends AbstractBundle
             $services->load('Byfareska\\StaticSite\\Editor\\', $src . '/Editor/');
             $services->load('Byfareska\\StaticSite\\Integration\\Crud\\', $src . '/Integration/Crud/');
             $services->get(Integration\Crud\TextsController::class)->tag('controller.service_arguments');
+            $services->get(Integration\Crud\SettingsController::class)->tag('controller.service_arguments');
         }
     }
 
@@ -409,7 +432,7 @@ final class StaticSiteBundle extends AbstractBundle
     /**
      * The "files" of the fields of the editor: false, or where they upload (a storage the site publishes).
      *
-     * @param array{storages: array<string, string>, editor: bool|array<string, mixed>} $files
+     * @param array{storages: array<string, mixed>, editor: bool|array<string, mixed>} $files
      *
      * @return false|array<string, mixed>
      */

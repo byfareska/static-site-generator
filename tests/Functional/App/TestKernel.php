@@ -25,7 +25,8 @@ use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
 /**
  * An application with a contact endpoint, a page that uses it and two local targets: "plain" (no backend) and
  * "app" (served by this application). The environment "markdown" has clean URLs and the Markdown versions; "crud"
- * the panel of byfareska/crud with its files (the storage "public", published as uploads/).
+ * the panel of byfareska/crud with its files (the storage "public", published as uploads/, every file of it); "crud_used"
+ * the same publishing only the files the pages use.
  */
 final class TestKernel extends Kernel
 {
@@ -36,7 +37,7 @@ final class TestKernel extends Kernel
         yield new FrameworkBundle();
         yield new TwigBundle();
         yield new DoctrineBundle();
-        if ($this->environment === 'crud') {
+        if ($this->hasCrud()) {
             yield new TwigComponentBundle();
             yield new LiveComponentBundle();
             yield new StimulusBundle();
@@ -44,6 +45,11 @@ final class TestKernel extends Kernel
             yield new CrudBundle();
         }
         yield new StaticSiteBundle();
+    }
+
+    private function hasCrud(): bool
+    {
+        return in_array($this->environment, ['crud', 'crud_used'], true);
     }
 
     public function getProjectDir(): string
@@ -93,7 +99,7 @@ final class TestKernel extends Kernel
             'orm' => [],
         ]);
         $files = [];
-        if ($this->environment === 'crud') {
+        if ($this->hasCrud()) {
             $container->extension('framework', ['form' => ['csrf_protection' => false]]);
             $container->extension('twig_component', ['defaults' => ['App\\Twig\\Components\\' => 'components/'], 'anonymous_template_directory' => 'components/']);
             $container->extension('byfareska_crud', [
@@ -102,6 +108,9 @@ final class TestKernel extends Kernel
                 'files' => ['storages' => ['public' => ['service' => 'test.public_storage', 'public_url' => '/uploads']]],
             ]);
             $files = ['files' => ['storages' => ['public' => 'uploads']], 'panel' => ['scope' => 'admin']];
+            if ($this->environment === 'crud_used') {
+                $files['files']['storages']['public'] = ['dir' => 'uploads', 'publish_all' => false];
+            }
         }
         $markdown = $this->environment === 'markdown' ? [
             'clean_urls' => true,
@@ -132,7 +141,7 @@ final class TestKernel extends Kernel
     {
         $routes->import('.', 'static_site_endpoints');
         $routes->import(dirname(__DIR__, 3) . '/config/routes/preview.php')->prefix('/admin/podglad');
-        if ($this->environment === 'crud') {
+        if ($this->hasCrud()) {
             $routes->import('admin', 'byfareska_crud')->prefix('/admin');
             $routes->import('.', 'static_site_panel')->prefix('/admin');
         }

@@ -2,6 +2,7 @@ static_site:
     nav:
         section: Strona
         texts: Teksty
+        settings: Ustawienia strony
     status:
         pending: Czeka w kolejce
         building: Budowanie…
@@ -41,6 +42,10 @@ static_site:
         placeholders: Znaczniki
         placeholders_help: Wpisane w tekst zostaną zastąpione wartością.
         groups: Grupy tekstów
+    settings:
+        publish_all_files: Publikuj wszystkie pliki z biblioteki
+        publish_all_files_help: Także te, których nie używa żadna strona (np. materiały do pobrania podlinkowane z zewnątrz). Wyłączone - na stronę trafiają tylko pliki użyte na stronach.
+        saved: Zapisano ustawienia. Zmiany pojawią się na stronie po publikacji.
 crud:
     site_publication:
         title: Publikacje

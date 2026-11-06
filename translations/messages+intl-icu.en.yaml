@@ -2,6 +2,7 @@ static_site:
     nav:
         section: Site
         texts: Texts
+        settings: Site settings
     status:
         pending: Waiting
         building: Building…
@@ -41,6 +42,10 @@ static_site:
         placeholders: Placeholders
         placeholders_help: Typed into a text, they are replaced by their value.
         groups: Groups of texts
+    settings:
+        publish_all_files: Publish every file of the library
+        publish_all_files_help: Also those no page uses (downloads linked from elsewhere). Off - the site gets only the files its pages use.
+        saved: The settings are saved. The site shows them after the next publication.
 crud:
     site_publication:
         title: Publications

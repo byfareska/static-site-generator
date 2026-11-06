@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Byfareska\StaticSite\Build;
 
+use Byfareska\StaticSite\File\SiteFile;
+use Byfareska\StaticSite\File\SiteFileLibrary;
 use Byfareska\StaticSite\Markdown\LlmsTxt;
 use Byfareska\StaticSite\Markdown\MarkdownPage;
 use Byfareska\StaticSite\Markdown\MarkdownRenderer;
@@ -13,12 +15,13 @@ use Byfareska\StaticSite\Page\SitePaths;
 use Byfareska\StaticSite\Redirect\Htaccess;
 use Byfareska\StaticSite\Redirect\RedirectStub;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 use Symfony\Component\Filesystem\Filesystem;
 
 /**
  * Builds the whole site into a directory of its own: files of the providers, pages (and their Markdown versions), the
- * uploaded files the pages use, redirects, then sitemap.xml, robots.txt and llms.txt. A build is the same for every
- * target; publishing sends it.
+ * uploaded files (those the pages use, or every one of a library published whole), redirects, then sitemap.xml,
+ * robots.txt and llms.txt. A build is the same for every target; publishing sends it.
  */
 final readonly class SiteBuilder
 {
@@ -41,6 +44,9 @@ final readonly class SiteBuilder
         private string $endpointScript,
         #[Autowire('%static_site.endpoints.script_source%')]
         private string $endpointScriptSource,
+        /** @var iterable<SiteFileLibrary> */
+        #[AutowireIterator(SiteFileLibrary::FILE_LIBRARY_TAG)]
+        private iterable $libraries = [],
     ) {
         $this->fs = new Filesystem();
     }
@@ -99,16 +105,7 @@ final readonly class SiteBuilder
             }
             $log(sprintf('Strony: %d', count($pages)));
 
-            $used = $this->state->usedFiles();
-            foreach ($used as $path => $file) {
-                if (isset($pages[$path]) || isset($files[$path])) {
-                    throw new \LogicException(sprintf('The uploaded file "%s" would take the place of a page or a file of the site.', $path));
-                }
-                $file->dumpTo($dir . '/' . $path);
-            }
-            if ($used !== []) {
-                $log(sprintf('Pliki z biblioteki: %d', count($used)));
-            }
+            $this->writeUploadedFiles($dir, $pages, $files, $log);
             if ($this->markdown->isEnabled()) {
                 $log(sprintf('Markdown: %d stron', $markdownCount));
             }
@@ -146,6 +143,50 @@ final readonly class SiteBuilder
             throw $e;
         } finally {
             $this->state->reset();
+        }
+    }
+
+    /**
+     * The uploaded files the pages use, and every file of the libraries published whole ({@see SiteFileLibrary}). One
+     * of a library that cannot be read (its bytes gone) is left out; one a page uses must be there.
+     *
+     * @param array<string, SitePage> $pages
+     * @param array<string, SiteFile> $files
+     * @param \Closure(string): void  $log
+     */
+    private function writeUploadedFiles(string $dir, array $pages, array $files, \Closure $log): void
+    {
+        $used = $this->state->usedFiles();
+        $all = [];
+        foreach ($this->libraries as $library) {
+            foreach ($library->allFiles() as $file) {
+                if (!isset($used[$file->path])) {
+                    $all[$file->path] ??= $file;
+                }
+            }
+        }
+
+        $written = 0;
+        foreach ($used + $all as $path => $file) {
+            if (isset($pages[$path]) || isset($files[$path])) {
+                throw new \LogicException(sprintf('The uploaded file "%s" would take the place of a page or a file of the site.', $path));
+            }
+            try {
+                $file->dumpTo($dir . '/' . $path);
+                ++$written;
+            } catch (\RuntimeException $e) {
+                if (isset($used[$path])) {
+                    throw $e;
+                }
+                $log(sprintf('Pominięto plik z biblioteki %s: %s', $path, $e->getMessage()));
+            }
+        }
+        if ($written > 0) {
+            $log(sprintf(
+                'Pliki z biblioteki: %d%s',
+                $written,
+                $all === [] ? '' : sprintf(' (używane przez strony: %d)', count($used)),
+            ));
         }
     }
 

@@ -61,7 +61,8 @@ final readonly class CrudStorageFiles implements SiteFileResolver
         return null;
     }
 
-    private function fileOf(FileReference $reference): ?SiteFile
+    /** The file of the site a file of a storage is; null when the site does not publish its storage. */
+    public function fileOf(FileReference $reference): ?SiteFile
     {
         $directory = $this->directories[$reference->storage] ?? null;
         $storages = $this->storages;

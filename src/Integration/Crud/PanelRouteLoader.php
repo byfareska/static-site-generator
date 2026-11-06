@@ -11,7 +11,7 @@ use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 
 /**
- * The pages of the site in the panel - the texts and the preview - imported under the prefix of the panel:
+ * The pages of the site in the panel - the texts, the settings and the preview - imported under the prefix of the panel:
  *
  *     static_site_panel:
  *         resource: .
@@ -35,6 +35,11 @@ final class PanelRouteLoader extends Loader
             '/teksty/{group}',
             $defaults + ['_controller' => TextsController::class . '::edit'],
             ['group' => '[a-z0-9_-]+'],
+            methods: ['GET', 'POST'],
+        ));
+        $routes->add('static_site_settings', new Route(
+            '/ustawienia-strony',
+            $defaults + ['_controller' => SettingsController::class],
             methods: ['GET', 'POST'],
         ));
         $routes->add('static_site_preview', new Route(
