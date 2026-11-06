@@ -10,7 +10,7 @@ use Symfony\Contracts\Service\ResetInterface;
 
 /**
  * What the drawing of the pages knows besides the current page: the render context, the files of the site (for the
- * versions of assets) and the endpoints the pages use.
+ * versions of assets), the endpoints and the uploaded files the pages use.
  */
 final class RenderState implements ResetInterface
 {
@@ -24,6 +24,9 @@ final class RenderState implements ResetInterface
 
     /** @var array<string, true> */
     private array $endpoints = [];
+
+    /** @var array<string, SiteFile> */
+    private array $usedFiles = [];
 
     public function __construct(private readonly SiteSources $sources)
     {
@@ -53,6 +56,18 @@ final class RenderState implements ResetInterface
         return $file === null ? null : ($this->hashes[$path] ??= $file->hash());
     }
 
+    /** A file the pages use (an uploaded one, {@see \Byfareska\StaticSite\File\SiteFileResolver}): the build writes it. */
+    public function useFile(SiteFile $file): void
+    {
+        $this->usedFiles[$file->path] ??= $file;
+    }
+
+    /** @return array<string, SiteFile> by path */
+    public function usedFiles(): array
+    {
+        return $this->usedFiles;
+    }
+
     public function useEndpoint(string $name): void
     {
         $this->endpoints[$name] = true;
@@ -70,5 +85,6 @@ final class RenderState implements ResetInterface
         $this->files = null;
         $this->hashes = [];
         $this->endpoints = [];
+        $this->usedFiles = [];
     }
 }

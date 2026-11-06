@@ -19,6 +19,9 @@ final class Catalog implements TextCatalog, PlaceholderProvider
             new TextItem('home.title', 'Tytuł', default: 'Witaj'),
             new TextItem('home.lead', 'Wstęp', TextType::Inline, 'Pisz na <strong>{email}</strong>'),
         ]);
+        yield new TextGroup('gallery', 'Galeria', [
+            new TextItem('gallery.image', 'Obraz', TextType::Image, 'img/port.png'),
+        ]);
     }
 
     public function placeholders(): iterable

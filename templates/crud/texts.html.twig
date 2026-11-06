@@ -12,6 +12,8 @@
         <div class="grid gap-6 lg:grid-cols-[1fr_18rem]">
             <div class="card card-border bg-base-100">
                 <div class="card-body">
+                    {# The widgets of crud: fields of files, the rich text the editor draws over. #}
+                    {% form_theme form with crud_form_themes() %}
                     {{ form_start(form) }}
                     {{ form_widget(form) }}
                     <div class="mt-4 flex items-center gap-3">

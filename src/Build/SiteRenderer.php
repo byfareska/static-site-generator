@@ -31,11 +31,22 @@ final readonly class SiteRenderer
                 return ($page->render)();
             }
 
-            return $this->twig->render((string) $page->template, [
-                ...$page->context,
-                'site_page' => $page,
-                'site_context' => $context,
-            ]);
+            return $this->twig->render((string) $page->template, self::variables($page, $context));
         });
+    }
+
+    /** Draws another template of the page (its Markdown version) with the variables and the links of the page. */
+    public function renderTemplate(SitePage $page, RenderContext $context, string $template): string
+    {
+        return $this->paths->within(
+            $page->path,
+            fn (): string => $this->twig->render($template, self::variables($page, $context)),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private static function variables(SitePage $page, RenderContext $context): array
+    {
+        return [...$page->context, 'site_page' => $page, 'site_context' => $context];
     }
 }

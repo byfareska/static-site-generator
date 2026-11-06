@@ -7,6 +7,7 @@ namespace Byfareska\StaticSite;
 use Byfareska\Crud\CrudBundle;
 use Byfareska\StaticSite\DependencyInjection\CollectEndpointsPass;
 use Byfareska\StaticSite\Endpoint\AsSiteEndpoint;
+use Byfareska\StaticSite\Page\SitePaths;
 use Byfareska\StaticSite\Publication\PublicationRunner;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\ChildDefinition;
@@ -53,6 +54,66 @@ final class StaticSiteBundle extends AbstractBundle
                 ->booleanNode('htaccess')
                     ->info('Put the redirects (and the rule of the endpoints) into .htaccess, for Apache.')
                     ->defaultTrue()
+                ->end()
+                ->booleanNode('clean_urls')
+                    ->info('Addresses without ".html" (/artykuly/x, /artykuly/); the files keep it and the server maps them (see README).')
+                    ->defaultFalse()
+                ->end()
+                ->arrayNode('markdown')
+                    ->info('A Markdown version of every page next to it (x.md), served at its address to "Accept: text/markdown". Needs clean_urls.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')->defaultFalse()->end()
+                        ->scalarNode('selector')
+                            ->info('What of the HTML goes into the Markdown (a CSS selector); the <body> when nothing matches.')
+                            ->defaultValue('main')
+                            ->cannotBeEmpty()
+                        ->end()
+                        ->arrayNode('exclude')
+                            ->info('What is left out of it (CSS selectors).')
+                            ->scalarPrototype()->end()
+                            ->defaultValue(['nav', 'header', 'footer', 'form', 'script', 'style', 'noscript', 'template', '[data-markdown-skip]'])
+                        ->end()
+                        ->booleanNode('llms_txt')
+                            ->info('Write llms.txt, a list of the pages for AI agents (unless a page or a file of the site is one).')
+                            ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('files')
+                    ->info('Files uploaded in the panel (byfareska_crud.files): published with the site when its pages use them.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->arrayNode('storages')
+                            ->info('The storages of byfareska/crud the site takes files from, and its directory each goes to: {public: uploads}.')
+                            ->useAttributeAsKey('name')
+                            ->scalarPrototype()
+                                ->cannotBeEmpty()
+                                ->beforeNormalization()->ifString()->then(static fn (string $dir): string => trim($dir, '/'))->end()
+                                ->validate()
+                                    ->ifTrue(static function (string $dir): bool {
+                                        try {
+                                            SitePaths::assertValid($dir);
+
+                                            return false;
+                                        } catch (\InvalidArgumentException) {
+                                            return true;
+                                        }
+                                    })
+                                    ->thenInvalid('%s is not a directory of the site (relative to its root, without "..").')
+                                ->end()
+                            ->end()
+                            ->defaultValue([])
+                        ->end()
+                        ->variableNode('editor')
+                            ->info('Uploads into the editor: true (into the first of "storages"), false, or {storage, accept, max_size}.')
+                            ->defaultTrue()
+                            ->validate()
+                                ->ifTrue(static fn (mixed $editor): bool => !is_bool($editor) && !is_array($editor))
+                                ->thenInvalid('static_site.files.editor is true, false or {storage, accept, max_size}.')
+                            ->end()
+                        ->end()
+                    ->end()
                 ->end()
                 ->arrayNode('targets')
                     ->info('Where the site is published, by name.')
@@ -138,6 +199,16 @@ final class StaticSiteBundle extends AbstractBundle
                         ->scalarNode('language')->info('A language of tinymce-i18n loaded by the application (e.g. "pl").')->defaultNull()->end()
                     ->end()
                 ->end()
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['markdown']['enabled'] && !$config['clean_urls'])
+                ->thenInvalid('static_site.markdown needs static_site.clean_urls: the Markdown is served at the address of its page.')
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => is_array($config['files']['editor'])
+                    && isset($config['files']['editor']['storage'])
+                    && !isset($config['files']['storages'][$config['files']['editor']['storage']]))
+                ->thenInvalid('static_site.files.editor uploads into a storage the site does not publish (static_site.files.storages).')
             ->end();
     }
 
@@ -165,6 +236,9 @@ final class StaticSiteBundle extends AbstractBundle
      *     keep_builds: int,
      *     sitemap: bool,
      *     htaccess: bool,
+     *     clean_urls: bool,
+     *     markdown: array{enabled: bool, selector: string, exclude: list<string>, llms_txt: bool},
+     *     files: array{storages: array<string, string>, editor: bool|array<string, mixed>},
      *     targets: array<string, array{label: string|null, dsn: string|null, service: string|null, strategy: string, backend: bool}>,
      *     publish: array{mode: string|null, schedule_every: string},
      *     sync: array{batch: int},
@@ -184,6 +258,13 @@ final class StaticSiteBundle extends AbstractBundle
         $parameters->set('static_site.keep_builds', $config['keep_builds']);
         $parameters->set('static_site.sitemap', $config['sitemap']);
         $parameters->set('static_site.htaccess', $config['htaccess']);
+        $parameters->set('static_site.clean_urls', $config['clean_urls']);
+        $parameters->set('static_site.markdown.enabled', $config['markdown']['enabled']);
+        $parameters->set('static_site.markdown.selector', $config['markdown']['selector']);
+        $parameters->set('static_site.markdown.exclude', $config['markdown']['exclude']);
+        $parameters->set('static_site.markdown.llms_txt', $config['markdown']['llms_txt']);
+        $parameters->set('static_site.files.storages', $config['files']['storages']);
+        $parameters->set('static_site.files.editor', self::editorFiles($config['files']));
         $parameters->set('static_site.targets', $config['targets']);
         $parameters->set(
             'static_site.publish.mode',
@@ -210,6 +291,7 @@ final class StaticSiteBundle extends AbstractBundle
             ->exclude([
                 $src . '/StaticSiteBundle.php',
                 $src . '/DependencyInjection/',
+                $src . '/Editor/',
                 $src . '/Entity/',
                 $src . '/Messenger/',
                 $src . '/Integration/',
@@ -217,13 +299,16 @@ final class StaticSiteBundle extends AbstractBundle
                 $src . '/File/SiteFile.php',
                 $src . '/Redirect/{Redirect,Htaccess,RedirectStub}.php',
                 $src . '/Build/{Build,PageRendering,Sitemap}.php',
+                $src . '/Markdown/{LlmsTxt,MarkdownPage}.php',
                 $src . '/Target/{Target,SyncPlan,SyncResult}.php',
                 $src . '/Publication/{PublicationStatus,TargetStatus}.php',
                 $src . '/Content/{SiteContent,SiteHtml}.php',
                 $src . '/Text/{TextType,TextItem,TextGroup,Placeholder,UnknownText}.php',
                 $src . '/Endpoint/{AsSiteEndpoint,EndpointResult,SubmissionStatus}.php',
             ]);
-        $services->get(Page\SitePaths::class)->arg('$baseUrl', '%static_site.base_url%');
+        $services->get(Page\SitePaths::class)
+            ->arg('$baseUrl', '%static_site.base_url%')
+            ->arg('$cleanUrls', '%static_site.clean_urls%');
         $services->get(Preview\PreviewController::class)->tag('controller.service_arguments');
         $services->get(Endpoint\TokenController::class)->tag('controller.service_arguments');
 
@@ -237,6 +322,8 @@ final class StaticSiteBundle extends AbstractBundle
 
         $bundles = $builder->hasParameter('kernel.bundles') ? $builder->getParameter('kernel.bundles') : [];
         if (is_array($bundles) && isset($bundles['CrudBundle']) && class_exists(CrudBundle::class)) {
+            // The editor is the rich text of crud; without crud a field of #[SiteHtml] is a textarea.
+            $services->load('Byfareska\\StaticSite\\Editor\\', $src . '/Editor/');
             $services->load('Byfareska\\StaticSite\\Integration\\Crud\\', $src . '/Integration/Crud/');
             $services->get(Integration\Crud\TextsController::class)->tag('controller.service_arguments');
         }
@@ -317,6 +404,23 @@ final class StaticSiteBundle extends AbstractBundle
         } else {
             $builder->prependExtensionConfig('framework', ['html_sanitizer' => $sanitizers]);
         }
+    }
+
+    /**
+     * The "files" of the fields of the editor: false, or where they upload (a storage the site publishes).
+     *
+     * @param array{storages: array<string, string>, editor: bool|array<string, mixed>} $files
+     *
+     * @return false|array<string, mixed>
+     */
+    private static function editorFiles(array $files): false|array
+    {
+        $first = array_key_first($files['storages']);
+        if ($files['editor'] === false || $first === null) {
+            return false;
+        }
+
+        return ($files['editor'] === true ? [] : $files['editor']) + ['storage' => $first];
     }
 
     public function getPath(): string

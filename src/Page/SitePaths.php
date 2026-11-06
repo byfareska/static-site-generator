@@ -8,14 +8,23 @@ use Symfony\Contracts\Service\ResetInterface;
 
 /**
  * Paths between the files of the site. Links are written relative to the page being drawn, so the same HTML works on
- * the target, in the preview of the panel (under its prefix) and opened from a directory.
+ * the target, in the preview of the panel (under its prefix) and opened from a directory. With clean URLs the links
+ * of pages lose ".html" ("artykuly/x.html" is "artykuly/x", "artykuly/index.html" is "artykuly/"); the files keep it
+ * and the server maps the address to the file.
  */
 final class SitePaths implements ResetInterface
 {
     private string $current = 'index.html';
 
-    public function __construct(private readonly string $baseUrl = '')
+    public function __construct(
+        private readonly string $baseUrl = '',
+        private readonly bool $cleanUrls = false,
+    ) {
+    }
+
+    public function cleanUrls(): bool
     {
+        return $this->cleanUrls;
     }
 
     public function current(): string
@@ -50,7 +59,7 @@ final class SitePaths implements ResetInterface
     public function relative(string $target): string
     {
         [$path, $suffix] = self::split($target);
-        $path = ltrim($path, '/');
+        $path = $this->addressOf(ltrim($path, '/'));
         $from = self::directoryOf($this->current);
         $fromParts = $from === '' ? [] : explode('/', $from);
         $toParts = $path === '' ? [] : explode('/', $path);
@@ -76,7 +85,7 @@ final class SitePaths implements ResetInterface
         return $relative . $suffix;
     }
 
-    /** The absolute address of a path of the site; "x/index.html" becomes "x/". */
+    /** The absolute address of a path of the site; "x/index.html" becomes "x/" (and "x/y.html" "x/y" with clean URLs). */
     public function absolute(string $target): string
     {
         [$path, $suffix] = self::split($target);
@@ -87,7 +96,7 @@ final class SitePaths implements ResetInterface
             $path = substr($path, 0, -strlen('index.html'));
         }
 
-        return rtrim($this->baseUrl, '/') . '/' . $path . $suffix;
+        return rtrim($this->baseUrl, '/') . '/' . $this->addressOf($path) . $suffix;
     }
 
     public function baseUrl(): string
@@ -123,6 +132,19 @@ final class SitePaths implements ResetInterface
         $path = ltrim($path, '/');
 
         return $path === '' || str_ends_with($path, '/') ? $path . 'index.html' : $path;
+    }
+
+    /** With clean URLs, the address of a file of the site: no "index.html", no ".html". */
+    private function addressOf(string $path): string
+    {
+        if (!$this->cleanUrls || !str_ends_with($path, '.html')) {
+            return $path;
+        }
+        if ($path === 'index.html' || str_ends_with($path, '/index.html')) {
+            return substr($path, 0, -strlen('index.html'));
+        }
+
+        return substr($path, 0, -strlen('.html'));
     }
 
     private static function directoryOf(string $path): string

@@ -1,4 +1,4 @@
 <!doctype html>
-<html lang="pl"><head><title>{{ title }}</title><link rel="stylesheet" href="{{ site_asset('css/style.css') }}"><link rel="canonical" href="{{ site_url(site_current_path()) }}"></head>
+<html lang="pl"><head><title>{{ title }}</title><meta name="description" content="Strona testowa"><link rel="stylesheet" href="{{ site_asset('css/style.css') }}"><link rel="canonical" href="{{ site_url(site_current_path()) }}"></head>
 <body><h1>{{ txt("home.title") }}</h1><p>{{ t_inline("home.lead") }}</p><a href="{{ site_path() }}">Start</a> <a href="{{ site_path('artykuly/pierwszy.html') }}">Pierwszy</a>
 {{ '<a href="/artykuly/pierwszy.html">w treści</a>'|site_links }}</body></html>

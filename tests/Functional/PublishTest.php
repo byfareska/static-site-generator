@@ -12,6 +12,7 @@ use Byfareska\StaticSite\Publication\Publisher;
 use Byfareska\StaticSite\Publication\ScheduledPublications;
 use Byfareska\StaticSite\Publication\SiteStatus;
 use Byfareska\StaticSite\Tests\Functional\App\Pages;
+use Byfareska\StaticSite\Text\Texts;
 use Byfareska\StaticSite\Tests\Functional\App\TestKernel;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -43,6 +44,77 @@ final class PublishTest extends FunctionalTestCase
         self::assertStringContainsString('Sitemap: https://example.com/sitemap.xml', (string) file_get_contents($dir . '/robots.txt'));
 
         self::assertFalse(self::service(SiteStatus::class)->anyNeedsPublication(['plain']));
+    }
+
+    public function testTheUploadedFilesThePagesUseArePublished(): void
+    {
+        self::bootKernel();
+        $publication = $this->publish(['plain']);
+
+        self::assertSame(PublicationStatus::Done, $publication->status, $publication->log);
+        self::assertStringContainsString('Pliki z biblioteki: 2', $publication->log);
+        $dir = TestKernel::varDir() . '/plain';
+        self::assertSame('HERO', file_get_contents($dir . '/media/hero.png'));
+        self::assertSame('LOGO', file_get_contents($dir . '/media/logo.png'));
+        self::assertFileDoesNotExist($dir . '/media/unused.png', 'A file no page uses stays in the panel.');
+
+        $gallery = (string) file_get_contents($dir . '/galeria/index.html');
+        self::assertStringContainsString('<meta property="og:image" content="https://example.com/media/hero.png">', $gallery);
+        self::assertStringContainsString('<img src="../media/hero.png" alt="Hero">', $gallery);
+        self::assertStringContainsString('<img src="../img/port.png" alt="Z tekstu">', $gallery, 'A text of an image by default: a path of the site.');
+        self::assertStringContainsString('<img src="../media/logo.png" srcset="../media/logo.png 2x, ../img/port.png 3x" alt="">', $gallery);
+        self::assertStringContainsString('<a href="https://example.org/media/x.png">obcy</a>', $gallery);
+
+        self::service(Texts::class)->save(['gallery.image' => 'test://logo.png']);
+        $publication = $this->publish(['plain']);
+        self::assertSame(PublicationStatus::Done, $publication->status, $publication->log);
+        self::assertStringContainsString('<img src="../media/logo.png" alt="Z tekstu">', (string) file_get_contents($dir . '/galeria/index.html'));
+    }
+
+    public function testCleanUrlsAndMarkdownVersions(): void
+    {
+        self::bootKernel(['environment' => 'markdown']);
+        $publication = $this->publish(['plain']);
+
+        self::assertSame(PublicationStatus::Done, $publication->status, $publication->log);
+        self::assertStringContainsString('Markdown: 3 stron', $publication->log);
+        $dir = TestKernel::varDir() . '/plain';
+
+        $article = (string) file_get_contents($dir . '/artykuly/pierwszy.html');
+        self::assertStringContainsString('<link rel="canonical" href="https://example.com/artykuly/pierwszy">', $article);
+        self::assertStringContainsString('<a href="../">Start</a> <a href="pierwszy">Pierwszy</a>', $article);
+        self::assertStringContainsString('<a href="pierwszy">w treści</a>', $article);
+        self::assertStringContainsString('<link rel="alternate" type="text/markdown" href="pierwszy.md"></head>', $article);
+        self::assertStringContainsString('<link rel="alternate" type="text/markdown" href="index.md"></head>', (string) file_get_contents($dir . '/index.html'));
+
+        $markdown = (string) file_get_contents($dir . '/artykuly/drugi.md');
+        self::assertStringStartsWith("---\ntitle: \"Drugi\"\ndescription: \"Drugi artykuł, o portach\"\nurl: https://example.com/artykuly/drugi\nupdated: 2026-11-01\n---\n", $markdown);
+        self::assertStringContainsString('[pierwszy](https://example.com/artykuly/pierwszy)', $markdown);
+        self::assertStringContainsString('[FAQ](https://example.com/#faq)', $markdown);
+        self::assertStringContainsString('![Port](https://example.com/img/port.png)', $markdown);
+        foreach (['Logo', 'Menu', 'Stopka', 'Reklama'] as $left) {
+            self::assertStringNotContainsString($left, $markdown);
+        }
+        self::assertStringContainsString('# Witaj', (string) file_get_contents($dir . '/index.md'));
+        self::assertFileExists($dir . '/bez-markdown.html');
+        self::assertFileDoesNotExist($dir . '/bez-markdown.md');
+        self::assertStringNotContainsString('rel="alternate"', (string) file_get_contents($dir . '/bez-markdown.html'));
+        self::assertFileDoesNotExist($dir . '/pierwszy.md', 'A redirect has no Markdown.');
+
+        $llms = (string) file_get_contents($dir . '/llms.txt');
+        self::assertStringStartsWith("# Start\n\n> Strona testowa\n\n## Strony\n\n", $llms);
+        self::assertStringContainsString("- [Drugi](https://example.com/artykuly/drugi.md): Drugi artykuł, o portach\n", $llms);
+        self::assertStringContainsString('- [Start](https://example.com/index.md)', $llms);
+        self::assertStringNotContainsString('bez-markdown', $llms);
+
+        $sitemap = (string) file_get_contents($dir . '/sitemap.xml');
+        self::assertStringContainsString('<loc>https://example.com/artykuly/pierwszy</loc>', $sitemap);
+        self::assertStringNotContainsString('.html<', $sitemap);
+
+        $htaccess = (string) file_get_contents($dir . '/.htaccess');
+        self::assertStringContainsString('RewriteRule ^pierwszy(?:\.html)?$ https://example.com/artykuly/pierwszy [R=301,L,NE]', $htaccess);
+        self::assertStringContainsString('RewriteRule ^(.*/)?$ $1index.md [END]', $htaccess);
+        self::assertStringContainsString("# END static-site\n\nAddDefaultCharset UTF-8", $htaccess);
     }
 
     public function testASecondPublicationSendsOnlyTheDifferences(): void

@@ -8,6 +8,9 @@ use Byfareska\StaticSite\Build\RenderState;
 use Byfareska\StaticSite\Build\SiteRenderer;
 use Byfareska\StaticSite\Build\SiteSources;
 use Byfareska\StaticSite\Build\Sitemap;
+use Byfareska\StaticSite\File\UploadedFiles;
+use Byfareska\StaticSite\Markdown\LlmsTxt;
+use Byfareska\StaticSite\Markdown\MarkdownRenderer;
 use Byfareska\StaticSite\Page\RenderContext;
 use Byfareska\StaticSite\Page\SitePage;
 use Byfareska\StaticSite\Page\SitePaths;
@@ -21,7 +24,8 @@ use Symfony\Component\Mime\MimeTypes;
 
 /**
  * The site drawn on request, by the code of the build: /<prefix>/live/... as it would be published, /<prefix>/drafts/...
- * with the drafts and scheduled content. Links are relative, so the whole site can be browsed under the prefix.
+ * with the drafts and scheduled content. Links are relative, so the whole site can be browsed under the prefix. With
+ * clean URLs "x" is the page x.html; its Markdown version is at "x.md" or at "x" with "Accept: text/markdown".
  * Import config/routes/preview.php under the prefix of the panel (its firewall guards it).
  */
 final readonly class PreviewController
@@ -31,6 +35,8 @@ final readonly class PreviewController
         private SiteRenderer $renderer,
         private RenderState $state,
         private SitePaths $paths,
+        private MarkdownRenderer $markdown,
+        private UploadedFiles $uploads,
         #[Autowire('%static_site.endpoints.script%')]
         private string $endpointScript,
         #[Autowire('%static_site.endpoints.script_source%')]
@@ -50,16 +56,35 @@ final readonly class PreviewController
             return new RedirectResponse($request->getBaseUrl() . $request->getPathInfo() . '/', 301);
         }
 
+        $files = $this->state->files();
         $page = $this->sources->page($context, $file);
+        $wantsMarkdown = $this->markdown->isEnabled() && MarkdownRenderer::wanted($request->headers->get('Accept'));
+        if ($page === null && !isset($files[$file])) {
+            if ($this->paths->cleanUrls() && pathinfo($file, PATHINFO_EXTENSION) === '') {
+                $page = $this->sources->page($context, $file . '.html');
+            } elseif ($this->markdown->isEnabled() && str_ends_with($file, '.md')) {
+                $page = $this->sources->page($context, substr($file, 0, -strlen('.md')) . '.html');
+                $page = $page !== null && $page->markdownPath() === $file ? $page : null;
+                $wantsMarkdown = true;
+            }
+        }
         if ($page !== null) {
             $content = $this->renderer->render($page, $context);
-            if ($page->isHtml()) {
-                $content = self::withBadge($content, $context->includeDrafts);
+            $markdownPath = $this->markdown->pathOf($page);
+            if ($markdownPath !== null && $wantsMarkdown) {
+                $response = $this->response($this->markdown->render($page, $context, $content)->content, $markdownPath);
+            } else {
+                if ($page->isHtml()) {
+                    $content = self::withBadge($this->markdown->withAlternate($page, $content), $context->includeDrafts);
+                }
+                $response = $this->response($content, $page->path);
+            }
+            if ($markdownPath !== null) {
+                $response->setVary('Accept');
             }
 
-            return $this->response($content, $file);
+            return $response;
         }
-        $files = $this->state->files();
         if (isset($files[$file])) {
             $siteFile = $files[$file];
             if ($siteFile->source !== null && is_file($siteFile->source)) {
@@ -70,6 +95,17 @@ final readonly class PreviewController
             }
 
             return $this->response($siteFile->read(), $file);
+        }
+        $upload = $this->uploads->atPath($file);
+        if ($upload !== null) {
+            $response = $this->response($upload->read(), $file);
+            // A path of an upload is random and never written again; private: the preview is the panel's.
+            $response->setMaxAge(86400);
+
+            return $response;
+        }
+        if ($file === LlmsTxt::PATH && $this->markdown->hasLlmsTxt()) {
+            return $this->response($this->llmsTxt($context), $file);
         }
         if ($file === 'sitemap.xml' || $file === 'robots.txt') {
             $pages = array_values(array_filter($this->sources->pages($context), static fn (SitePage $p): bool => $p->isInSitemap()));
@@ -92,6 +128,23 @@ final readonly class PreviewController
         throw new NotFoundHttpException(sprintf('The site has no page or file "%s".', $file));
     }
 
+    private function llmsTxt(RenderContext $context): string
+    {
+        $versions = [];
+        $home = null;
+        foreach ($this->sources->pages($context) as $page) {
+            if ($page->path === 'index.html' || ($this->markdown->pathOf($page) !== null && $page->isInSitemap())) {
+                $html = $this->renderer->render($page, $context);
+                $home = $page->path === 'index.html' ? $html : $home;
+                if ($this->markdown->pathOf($page) !== null && $page->isInSitemap()) {
+                    $versions[] = $this->markdown->render($page, $context, $html);
+                }
+            }
+        }
+
+        return $this->markdown->llmsTxt($home, $versions);
+    }
+
     private function response(string $content, string $file): Response
     {
         $response = new Response($content, 200, ['Content-Type' => self::type($file)]);
@@ -106,6 +159,7 @@ final readonly class PreviewController
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $type = match ($extension) {
             'html', 'htm' => 'text/html',
+            'md' => 'text/markdown',
             'xml' => 'application/xml',
             'txt', '' => 'text/plain',
             'js' => 'text/javascript',

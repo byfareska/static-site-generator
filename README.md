@@ -8,9 +8,9 @@ upload that was cut off.
 Optional parts, used when their package is installed:
 
 - **texts**: a catalog of the texts of the site, edited in the panel, with placeholders (`{email}`);
-- **TinyMCE editor** for the HTML of the content (`RichTextType`), sanitized on save;
+- **TinyMCE editor** for the HTML of the content (`RichTextType`, the rich text of byfareska/crud), sanitized on save;
 - **byfareska/crud** integration: publish button, publication history with rollback, text pages, a dashboard widget,
-  the submissions of the endpoints;
+  the submissions of the endpoints, files uploaded in the panel published with the site;
 - **endpoints**: the dynamic bits of a static site (a contact form) served by the same application;
 - **symfony/messenger / symfony/scheduler**: publishing in a worker, scheduled content published by itself.
 
@@ -39,6 +39,8 @@ static_site:
         produkcja: { label: 'example.com (FTP)', dsn: '%env(SITE_FTP_DSN)%' }
     publish:
         mode: messenger                    # messenger | terminate | cron (default: messenger when installed)
+    clean_urls: true                       # /artykuly/x instead of /artykuly/x.html (see "Clean URLs and Markdown")
+    markdown: { enabled: true }            # x.md next to every page, served to "Accept: text/markdown"
 ```
 
 `bin/console config:dump-reference static_site` lists every option.
@@ -97,19 +99,143 @@ In the templates:
 | `site_path('css/style.css')`, `site_path('artykuly/')` | a link relative to the page: works on any domain, in a subdirectory, in the preview, from `file://` |
 | `site_asset('css/style.css')` | the same with `?v=<hash>` of the file |
 | `site_url('artykuly/')` | the absolute address (canonical, Open Graph, feeds) |
-| `html\|site_links` | `href="/..."` of HTML written in the panel made relative |
+| `html\|site_links` | `href="/..."` of HTML written in the panel made relative; its uploaded files published |
+| `site_file(article.cover)` | a link to an uploaded file (`public://ab/cd/x.jpg`, see "Files"), or to a path of the site |
+| `site_file_url(article.cover)` | the same as an absolute address (Open Graph) |
 | `site_page`, `site_context` | the page being drawn, its `RenderContext` |
+
+## Clean URLs and Markdown
+
+AI agents and tools (Claude Code, Cursor, readers of LLMs) prefer Markdown to HTML: fewer tokens, no layout. With
+both options the same address (`/artykuly/x`) serves the HTML to a browser and the Markdown to a client that sends
+`Accept: text/markdown`.
+
+```yaml
+static_site:
+    clean_urls: true            # default false
+    markdown:
+        enabled: true           # default false; needs clean_urls
+        selector: 'main'        # what of the HTML goes into the .md (the <body> when nothing matches)
+        exclude: ['nav', 'header', 'footer', 'form', 'script', 'style', 'noscript', 'template', '[data-markdown-skip]']
+        llms_txt: true          # a list of the pages for agents
+```
+
+**`clean_urls`** writes the links, the canonical addresses, the sitemap and `site_url()` without `.html`
+(`artykuly/x.html` is `/artykuly/x`, `artykuly/index.html` is `/artykuly/`). The files keep `.html`; the server maps
+the address to the file, and `/x.html` is moved to `/x` for good. A site opened from `file://` has no working links
+then.
+
+**`markdown`** writes `x.md` next to every HTML page (`index.md` for a directory), with
+`<link rel="alternate" type="text/markdown" href="x.md">` in its `<head>`:
+
+```markdown
+---
+title: "The <title> of the page"
+description: "Its meta description"
+url: https://example.com/artykuly/x
+updated: 2026-11-01
+---
+[Strona główna](https://example.com/) · [Spis stron](https://example.com/llms.txt)
+
+# The content of <main>, with absolute links
+```
+
+- `new SitePage(..., markdown: false)`: no Markdown version (a form, a 404 page).
+- `new SitePage(..., markdown: 'site/article.md.twig')`: the content is drawn by that template, with the variables and
+  the links of the page, where the conversion of the HTML is poor. Twig escapes `.md.twig` as HTML: write
+  `{% autoescape false %}...{% endautoescape %}` in it.
+- `llms.txt` ([llmstxt.org](https://llmstxt.org)): the `<title>` and the meta description of the home page, then
+  `- [title](https://example.com/x.md): description` of every page with a Markdown version in the sitemap. Not
+  written when the site has its own.
+- The preview of the panel serves both: `x` is the page, `x.md` (or `x` with `Accept: text/markdown`) its Markdown.
+
+Apache: the build writes the rules into `.htaccess` (with `RewriteBase` of `base_url`); it needs `mod_rewrite`,
+`AllowOverride All` (the block sets `Options -MultiViews`) and, for `Vary: Accept`, `mod_headers`:
+
+```apache
+Options -MultiViews
+AddType text/markdown .md
+AddCharset UTF-8 .md
+<IfModule mod_headers.c>
+    <FilesMatch "\.(html|md)$">
+        Header always merge Vary Accept
+    </FilesMatch>
+</IfModule>
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+# ... the endpoints and the redirects (both /old.html and /old) ...
+# /x.html -> /x, /a/index.html -> /a/ (the requests of the client only, not the rewrites below)
+RewriteCond %{THE_REQUEST} \s/+((?:[^?\s]*/)?)index\.html[\s?]
+RewriteRule ^ /%1 [R=301,L,NE]
+RewriteCond %{THE_REQUEST} \s/+([^?\s]+)\.html[\s?]
+RewriteRule ^ /%1 [R=301,L,NE]
+# Markdown to a client that wants it (not to a browser, not with q=0)
+RewriteCond %{HTTP_ACCEPT} text/markdown [NC]
+RewriteCond %{HTTP_ACCEPT} !^\s*text/html [NC]
+RewriteCond %{HTTP_ACCEPT} !text/markdown\s*;\s*q=0(\.0*)?\s*(,|$) [NC]
+RewriteCond %{REQUEST_FILENAME}index.md -f
+RewriteRule ^(.*/)?$ $1index.md [END]
+RewriteCond %{HTTP_ACCEPT} text/markdown [NC]
+RewriteCond %{HTTP_ACCEPT} !^\s*text/html [NC]
+RewriteCond %{HTTP_ACCEPT} !text/markdown\s*;\s*q=0(\.0*)?\s*(,|$) [NC]
+RewriteCond %{REQUEST_FILENAME}.md -f
+RewriteRule ^((?:.*/)?[^/.]+)$ $1.md [END]
+# The HTML by default, the Markdown of a page without one
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^((?:.*/)?[^/.]+)$ $1.html [END]
+RewriteCond %{REQUEST_FILENAME}.md -f
+RewriteRule ^((?:.*/)?[^/.]+)$ $1.md [END]
+</IfModule>
+```
+
+A client gets the Markdown when its `Accept` names `text/markdown` (not with `q=0`) and does not begin with
+`text/html`, as the one of a browser does: `text/markdown, text/html;q=0.9, */*` is an agent.
+
+nginx (in the `http {}` that includes `mime.types`):
+
+```nginx
+types { text/markdown md; }    # nginx's mime.types has no .md
+
+map $http_accept $site_ext {
+    default                                     .html;
+    "~*^\s*text/html"                           .html;
+    "~*text/markdown\s*;\s*q=0(\.0*)?\s*(,|$)"  .html;
+    "~*text/markdown"                           .md;
+}
+
+server {
+    root /srv/app/var/site/current;
+    index index.html;
+    charset utf-8;
+    charset_types text/markdown text/plain text/css application/javascript application/xml;
+
+    # 301: /x.html -> /x, /a/index.html -> /a/
+    if ($request_uri ~ "^(?<p>[^?]*/)index\.html(?<q>\?.*)?$") { return 301 $p$q; }
+    if ($request_uri ~ "^(?<p>[^?]*)\.html(?<q>\?.*)?$")       { return 301 $p$q; }
+
+    location / {
+        add_header Vary Accept always;
+        try_files $uri $uri$site_ext ${uri}index$site_ext $uri.html ${uri}index.html $uri.md $uri/ =404;
+    }
+    # location /api/ ... as in "Serving a site with endpoints"
+}
+```
+
+The redirects of a `RedirectProvider` are pages that send on there; write them as `return 301` for a status.
 
 ## Texts
 
 The texts of the layout live in a catalog of the application (`TextCatalog`: groups of `TextItem(key, label, type,
 default)`); the database keeps only what was changed in the panel. Types: `plain`, `multiline`, `inline` (one line with
-bold, italics, links, `span.accent`) and `html`.
+bold, italics, links, `span.accent`), `html`, `image` and `file` (a field of files of crud; an empty one is the default
+again, which may be a path of the site: `img/hero.jpg`).
 
 ```twig
 <h1>{{ t_inline('hero.title') }}</h1>
 <p>{{ txt('hero.button') }}</p>
 <div>{{ t_html('problem.body') }}</div>
+<img src="{{ t_file('hero.image') }}" alt="">  {# t_file_url() for Open Graph #}
 {{ article.body|rich }}   {# HTML of an entity: placeholders filled, links relative #}
 ```
 
@@ -120,25 +246,30 @@ the stored texts no catalog knows any more.
 
 Entities of the site implement the marker `SiteContent`: saving one marks the site "changed" (per target, in the
 panel). An HTML property gets `#[SiteHtml(SiteHtml::CONTENT)]` (blocks) or `#[SiteHtml(SiteHtml::INLINE)]`: it is
-sanitized on save, and its form field is guessed as the TinyMCE editor. `headingIds: ['h3']` gives headings without an
-id one made of their text, so that a link can point at a section.
+sanitized on save, and with byfareska/crud its form field is guessed as the editor. `headingIds: ['h3']` gives headings
+without an id one made of their text, so that a link can point at a section.
+
+The editor (`RichTextType`) is the rich text of byfareska/crud (`CrudRichTextType`) with an editor of its own,
+`static-site`: TinyMCE with the accent, abbreviations, "insert block" and "insert data" (the placeholders). With
+`static_site.files` its images and files are uploaded into a storage the site publishes and picked from the library of
+the panel (`'files' => false` on a field: none). Without crud a `#[SiteHtml]` field is a textarea.
 
 ```yaml
 static_site:
     editor:
-        language: pl                       # from tinymce-i18n, loaded by your entry point
+        language: pl                       # from tinymce-i18n, loaded by your entry point (default: <html lang>)
         content_css: build/site-editor.css # the site's stylesheet in the editor (an asset, versioned by its manifest)
         blocks:                            # the "insert block" menu
             - { title: 'Quote with comment', html: '<figure><figcaption>…</figcaption><blockquote><p>…</p></blockquote></figure>' }
 ```
 
-The editor is a Stimulus controller of the npm package in `assets/` (`"@byfareska/static-site": "file:vendor/byfareska/static-site-generator-bundle/assets"`,
-peer dependency `tinymce`):
+The editor is in the npm package in `assets/` (`"@byfareska/static-site": "file:vendor/byfareska/static-site-generator-bundle/assets"`,
+peer dependencies `@byfareska/crud` and `tinymce`). TinyMCE is the application's, with the plugins autolink,
+autoresize, code, image, link, lists and table (see "Rich text" in the README of byfareska/crud):
 
 ```js
-import { registerStaticSiteControllers } from '@byfareska/static-site';
-registerStaticSiteControllers(app);
-import 'tinymce-i18n/langs8/pl.js';
+import { registerStaticSiteEditor } from '@byfareska/static-site';
+registerStaticSiteEditor(() => import('./tinymce.js').then((module) => module.default));
 ```
 
 ## Publishing
@@ -183,6 +314,45 @@ It adds: the button "Publish" with the targets and the state of each (top bar), 
 rollback to a target, retry), the dashboard widget, "Texts" with a page per group of the catalog, the preview
 (`/admin/podglad/live/`, `/admin/podglad/drafts/`), and "Submissions" when the site has endpoints.
 Translations: Polish and English.
+
+## Files
+
+Files uploaded in the panel of byfareska/crud (`byfareska_crud.files`) are published with the site - only those its
+pages use: a field of files shown with `site_file()`, a text of the type `image` / `file` (`t_file()`), an image or a
+link of the HTML of the editor (`t_html`, `|rich`, `|site_links`). A file uploaded and never shown, or shown only by a
+draft, stays in the panel.
+
+```yaml
+# config/packages/byfareska_crud.yaml
+byfareska_crud:
+    files:
+        storages:
+            public: { service: app.public_storage, public_url: /uploads }
+
+# config/packages/static_site.yaml
+static_site:
+    files:
+        storages: { public: uploads }    # public://ab/cd/x.jpg is uploads/ab/cd/x.jpg of the site
+        editor: true                     # the editor uploads into the first of them; false, or {storage, accept, max_size}
+```
+
+```php
+#[ORM\Column(nullable: true)]
+#[CrudFile(accept: ['images'])]
+public ?string $cover = null;           // "public://ab/cd/....jpg"
+```
+
+```twig
+<img src="{{ site_file(article.cover) }}" alt="">
+<meta property="og:image" content="{{ site_file_url(article.cover) }}">
+```
+
+The HTML of the editor keeps the addresses of the storage (`/uploads/ab/cd/x.jpg`, of the panel's domain): the build
+writes them as paths of the site, relative to the page. The preview serves the files at their paths. The files of the
+texts are told to crud's index of usages (resource `static_site_text`), so `byfareska:crud:files:prune` keeps them.
+
+Another source of files the pages use (a DAM, generated images) is a `SiteFileResolver`: a reference or an address to
+a `SiteFile` (`SiteFile::stream($path, fn () => $stream)`), and a path back to it for the preview.
 
 ## Endpoints
 
@@ -270,4 +440,5 @@ vendor/bin/phpstan analyse
 ```
 
 The functional tests run a small application (`tests/Functional/App`): two local targets, an endpoint, a catalog of
-texts.
+texts, files of a test resolver; its environment `crud` has the panel of byfareska/crud with a storage of files. They
+need the PHP extensions `pdo_sqlite`, `ftp` and `intl`.

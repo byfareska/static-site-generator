@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Byfareska\StaticSite\Text;
 
-use Byfareska\StaticSite\Page\SitePaths;
+use Byfareska\StaticSite\Content\SiteLinks;
 use Byfareska\StaticSite\Twig\SiteExtension;
 use Twig\Attribute\AsTwigFilter;
 use Twig\Attribute\AsTwigFunction;
@@ -16,13 +16,15 @@ use Twig\Attribute\AsTwigFunction;
  * - t_lines('hero.lead') - plain text, new lines as <br>;
  * - t_html('about.body') - HTML of the editor, its links relative to the page;
  * - t_inline('hero.lead') - HTML without the <p> around it, to put inside a heading or a paragraph;
+ * - t_file('hero.image') - a link to the file of a text of the type image or file;
  * - '...'|fill - the placeholders of any string, '...'|rich - of HTML, with links made relative.
  */
 final readonly class TextExtension
 {
     public function __construct(
         private Texts $texts,
-        private SitePaths $paths,
+        private SiteLinks $links,
+        private SiteExtension $site,
     ) {
     }
 
@@ -53,7 +55,7 @@ final readonly class TextExtension
             ? $this->texts->get($key, $vars)
             : nl2br(htmlspecialchars($this->texts->get($key, $vars)), false);
 
-        return SiteExtension::relativeLinks($html, $this->paths);
+        return $this->links->rewrite($html);
     }
 
     /** @param array<string, scalar|null> $vars */
@@ -61,6 +63,20 @@ final readonly class TextExtension
     public function inline(string $key, array $vars = []): string
     {
         return self::unwrapParagraph($this->html($key, $vars));
+    }
+
+    /** A link to the file of a text (an uploaded file, or a path of the site); "" for none. */
+    #[AsTwigFunction('t_file')]
+    public function file(string $key): string
+    {
+        return $this->site->file($this->texts->raw($key));
+    }
+
+    /** t_file() as an absolute address: for Open Graph. */
+    #[AsTwigFunction('t_file_url')]
+    public function fileUrl(string $key): string
+    {
+        return $this->site->fileUrl($this->texts->raw($key));
     }
 
     /** @param array<string, scalar|null> $vars */
@@ -74,7 +90,7 @@ final readonly class TextExtension
     #[AsTwigFilter('rich', isSafe: ['html'])]
     public function rich(?string $html, array $vars = []): string
     {
-        return SiteExtension::relativeLinks($this->texts->fill((string) $html, $vars, true), $this->paths);
+        return $this->links->rewrite($this->texts->fill((string) $html, $vars, true));
     }
 
     #[AsTwigFilter('unwrap_p', isSafe: ['html'])]

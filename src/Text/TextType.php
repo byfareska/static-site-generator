@@ -18,8 +18,19 @@ enum TextType: string
     /** HTML of the editor: paragraphs, lists, quotes. */
     case Html = 'html';
 
+    /** An image: uploaded in the panel ("public://ab/cd/x.jpg") or a path of the site; t_file() links to it. */
+    case Image = 'image';
+
+    /** A file of any kind (a PDF, a price list): as an image. */
+    case File = 'file';
+
     public function isHtml(): bool
     {
         return $this === self::Inline || $this === self::Html;
+    }
+
+    public function isFile(): bool
+    {
+        return $this === self::Image || $this === self::File;
     }
 }

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Byfareska\StaticSite\Twig;
 
 use Byfareska\StaticSite\Build\RenderState;
+use Byfareska\StaticSite\Content\SiteLinks;
 use Byfareska\StaticSite\Endpoint\SiteEndpoints;
+use Byfareska\StaticSite\File\UploadedFiles;
 use Byfareska\StaticSite\Page\RenderContext;
 use Byfareska\StaticSite\Page\SitePaths;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -21,6 +23,8 @@ final readonly class SiteExtension
         private SitePaths $paths,
         private RenderState $state,
         private SiteEndpoints $endpoints,
+        private SiteLinks $links,
+        private UploadedFiles $files,
         #[Autowire('%static_site.endpoints.script%')]
         private string $endpointScript,
     ) {
@@ -50,6 +54,40 @@ final readonly class SiteExtension
         return $this->paths->absolute($target);
     }
 
+    /**
+     * A link to a file: an uploaded one ("public://ab/cd/x.jpg", the value of a field of files), published with the
+     * site because the page uses it, or a path of the site ("img/hero.jpg"); "" for none.
+     */
+    #[AsTwigFunction('site_file')]
+    public function file(string|\Stringable|null $file): string
+    {
+        $path = $this->filePath($file);
+
+        return $path === null ? '' : $this->paths->relative($path);
+    }
+
+    /** site_file() as an absolute address: for Open Graph, feeds. */
+    #[AsTwigFunction('site_file_url')]
+    public function fileUrl(string|\Stringable|null $file): string
+    {
+        $path = $this->filePath($file);
+
+        return $path === null ? '' : $this->paths->absolute($path);
+    }
+
+    /** The path of the site of a reference or of a path; null for none. */
+    public function filePath(string|\Stringable|null $file): ?string
+    {
+        $value = trim((string) $file);
+        if ($value === '') {
+            return null;
+        }
+
+        $uploaded = $this->files->use($value);
+
+        return $uploaded !== null ? $uploaded->path : ltrim($value, '/');
+    }
+
     #[AsTwigFunction('site_current_path')]
     public function currentPath(): string
     {
@@ -64,12 +102,12 @@ final readonly class SiteExtension
 
     /**
      * The links of HTML written in the panel ("/propozycje.png", "/#faq") made relative to the page, so they work in
-     * the preview and on a site in a subdirectory too.
+     * the preview and on a site in a subdirectory too; its uploaded files published with the site.
      */
     #[AsTwigFilter('site_links', isSafe: ['html'])]
     public function links(?string $html): string
     {
-        return self::relativeLinks((string) $html, $this->paths);
+        return $this->links->rewrite($html);
     }
 
     /** The address of an endpoint of the application (#[AsSiteEndpoint]); the build notes that the site uses it. */
@@ -91,15 +129,6 @@ final readonly class SiteExtension
             '<script src="%s" data-token-url="%s" defer></script>',
             htmlspecialchars($this->paths->relative($this->endpointScript)),
             htmlspecialchars($this->paths->basePath() . $this->endpoints->path(SiteEndpoints::TOKEN)),
-        );
-    }
-
-    public static function relativeLinks(string $html, SitePaths $paths): string
-    {
-        return (string) preg_replace_callback(
-            '/\b(href|src)=(["\'])\/(?!\/)([^"\']*)\2/i',
-            static fn (array $m): string => sprintf('%s=%s%s%s', $m[1], $m[2], $paths->relative('/' . $m[3]), $m[2]),
-            $html,
         );
     }
 }

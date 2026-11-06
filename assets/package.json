@@ -1,7 +1,7 @@
 {
     "name": "@byfareska/static-site",
-    "description": "Stimulus controllers of byfareska/static-site-generator-bundle: the TinyMCE editor of the panel.",
-    "version": "0.1.0",
+    "description": "The editor of byfareska/static-site-generator-bundle: TinyMCE for the HTML of the site, through the rich text of @byfareska/crud.",
+    "version": "0.2.0",
     "license": "MIT",
     "type": "module",
     "main": "src/index.js",
@@ -9,7 +9,7 @@
         ".": "./src/index.js"
     },
     "peerDependencies": {
-        "@hotwired/stimulus": "^3.2",
+        "@byfareska/crud": "*",
         "tinymce": "^8.0"
     },
     "optionalPeerDependencies": {

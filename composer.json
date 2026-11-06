@@ -23,6 +23,7 @@
         "doctrine/orm": "^3.5",
         "league/flysystem": "^3.29",
         "league/flysystem-local": "^3.29",
+        "league/html-to-markdown": "^5.1",
         "psr/log": "^3.0",
         "symfony/console": "^8.0",
         "symfony/dependency-injection": "^8.0",
@@ -31,7 +32,7 @@
         "symfony/finder": "^8.0",
         "symfony/form": "^8.0",
         "symfony/framework-bundle": "^8.0",
-        "symfony/html-sanitizer": "^8.0",
+        "symfony/html-sanitizer": "^8.1.11",
         "symfony/http-foundation": "^8.0",
         "symfony/http-kernel": "^8.0",
         "symfony/mime": "^8.0",
@@ -65,7 +66,7 @@
         "symfony/scheduler": "A worker publishes scheduled content by itself (consume scheduler_static_site)",
         "symfony/rate-limiter": "Rate limits of the endpoints (#[AsSiteEndpoint(rateLimit: ...)])",
         "symfony/asset": "The stylesheet of the editor (editor.content_css) as a versioned asset",
-        "byfareska/crud": "For the pages of the site in the admin panel: publications, texts, submissions"
+        "byfareska/crud": "For the pages of the site in the admin panel: publications, texts, submissions; the editor and uploaded files"
     },
     "autoload": {
         "psr-4": {

@@ -68,7 +68,58 @@ final class TextsAndPreviewTest extends FunctionalTestCase
         $client->request('GET', '/admin/podglad/live/sitemap.xml');
         self::assertResponseIsSuccessful();
 
+        $client->request('GET', '/admin/podglad/live/media/hero.png');
+        self::assertResponseIsSuccessful();
+        self::assertSame('HERO', $client->getResponse()->getContent());
+        self::assertResponseHeaderSame('Content-Type', 'image/png');
+
+        $client->request('GET', '/admin/podglad/live/galeria/');
+        self::assertStringContainsString('<img src="../media/hero.png" alt="Hero">', (string) $client->getResponse()->getContent());
+
+        $client->request('GET', '/admin/podglad/live/media/nie-ma.png');
+        self::assertResponseStatusCodeSame(404);
+
         $client->request('GET', '/admin/podglad/live/nie-ma.html');
+        self::assertResponseStatusCodeSame(404);
+    }
+
+    public function testThePreviewWithCleanUrlsAndMarkdown(): void
+    {
+        $client = self::createClient(['environment' => 'markdown']);
+
+        $client->request('GET', '/admin/podglad/live/artykuly/drugi');
+        self::assertResponseIsSuccessful();
+        self::assertResponseHeaderSame('Content-Type', 'text/html; charset=UTF-8');
+        self::assertResponseHeaderSame('Vary', 'Accept');
+        $html = (string) $client->getResponse()->getContent();
+        self::assertStringContainsString('<link rel="alternate" type="text/markdown" href="drugi.md"></head>', $html);
+        self::assertStringContainsString('href="pierwszy"', $html);
+
+        $client->request('GET', '/admin/podglad/live/artykuly/drugi.md');
+        self::assertResponseIsSuccessful();
+        self::assertResponseHeaderSame('Content-Type', 'text/markdown; charset=UTF-8');
+        self::assertStringContainsString('url: https://example.com/artykuly/drugi', (string) $client->getResponse()->getContent());
+
+        $client->request('GET', '/admin/podglad/live/artykuly/drugi', server: ['HTTP_ACCEPT' => 'text/markdown, text/html;q=0.9']);
+        self::assertResponseHeaderSame('Content-Type', 'text/markdown; charset=UTF-8');
+        self::assertStringContainsString('[pierwszy](https://example.com/artykuly/pierwszy)', (string) $client->getResponse()->getContent());
+
+        $client->request('GET', '/admin/podglad/live/', server: ['HTTP_ACCEPT' => 'text/markdown']);
+        self::assertResponseHeaderSame('Content-Type', 'text/markdown; charset=UTF-8');
+        self::assertStringContainsString('# Witaj', (string) $client->getResponse()->getContent());
+
+        $client->request('GET', '/admin/podglad/live/artykuly/drugi.html', server: ['HTTP_ACCEPT' => 'text/html,*/*']);
+        self::assertResponseHeaderSame('Content-Type', 'text/html; charset=UTF-8');
+
+        $client->request('GET', '/admin/podglad/live/llms.txt');
+        self::assertResponseIsSuccessful();
+        self::assertStringContainsString('- [Drugi](https://example.com/artykuly/drugi.md)', (string) $client->getResponse()->getContent());
+
+        $client->request('GET', '/admin/podglad/live/bez-markdown');
+        self::assertResponseIsSuccessful();
+        $client->request('GET', '/admin/podglad/live/bez-markdown.md');
+        self::assertResponseStatusCodeSame(404);
+        $client->request('GET', '/admin/podglad/live/artykuly');
         self::assertResponseStatusCodeSame(404);
     }
 

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Byfareska\StaticSite\Build;
 
+use Byfareska\StaticSite\Markdown\LlmsTxt;
+use Byfareska\StaticSite\Markdown\MarkdownPage;
+use Byfareska\StaticSite\Markdown\MarkdownRenderer;
 use Byfareska\StaticSite\Page\RenderContext;
 use Byfareska\StaticSite\Page\SitePage;
 use Byfareska\StaticSite\Page\SitePaths;
@@ -13,8 +16,9 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Filesystem\Filesystem;
 
 /**
- * Builds the whole site into a directory of its own: files of the providers, pages, redirects, then sitemap.xml and
- * robots.txt. A build is the same for every target; publishing sends it.
+ * Builds the whole site into a directory of its own: files of the providers, pages (and their Markdown versions), the
+ * uploaded files the pages use, redirects, then sitemap.xml, robots.txt and llms.txt. A build is the same for every
+ * target; publishing sends it.
  */
 final readonly class SiteBuilder
 {
@@ -26,6 +30,7 @@ final readonly class SiteBuilder
         private RenderState $state,
         private SitePaths $paths,
         private BuildStore $store,
+        private MarkdownRenderer $markdown,
         #[Autowire('%static_site.sitemap%')]
         private bool $sitemap,
         #[Autowire('%static_site.htaccess%')]
@@ -62,13 +67,55 @@ final readonly class SiteBuilder
             $log(sprintf('Pliki: %d', count($files)));
 
             $pages = $this->sources->pages($context);
+            $markdown = [];
+            $markdownCount = 0;
+            $home = null;
             foreach ($pages as $page) {
                 if (isset($files[$page->path])) {
                     $log(sprintf('Strona %s zastępuje plik o tej samej ścieżce.', $page->path));
                 }
-                $this->fs->dumpFile($dir . '/' . $page->path, $this->renderer->render($page, $context));
+                $html = $this->renderer->render($page, $context);
+                if ($page->path === 'index.html') {
+                    $home = $html;
+                }
+                $markdownPath = $this->markdown->pathOf($page);
+                if ($markdownPath !== null) {
+                    if (isset($pages[$markdownPath]) || isset($files[$markdownPath])) {
+                        throw new \LogicException(sprintf(
+                            'The Markdown version of "%s" would be "%s", a page or a file of the site already (SitePage::$markdown: false).',
+                            $page->path,
+                            $markdownPath,
+                        ));
+                    }
+                    $version = $this->markdown->render($page, $context, $html);
+                    $this->fs->dumpFile($dir . '/' . $version->path, $version->content);
+                    ++$markdownCount;
+                    if ($page->isInSitemap()) {
+                        $markdown[] = $version;
+                    }
+                    $html = $this->markdown->withAlternate($page, $html);
+                }
+                $this->fs->dumpFile($dir . '/' . $page->path, $html);
             }
             $log(sprintf('Strony: %d', count($pages)));
+
+            $used = $this->state->usedFiles();
+            foreach ($used as $path => $file) {
+                if (isset($pages[$path]) || isset($files[$path])) {
+                    throw new \LogicException(sprintf('The uploaded file "%s" would take the place of a page or a file of the site.', $path));
+                }
+                $file->dumpTo($dir . '/' . $path);
+            }
+            if ($used !== []) {
+                $log(sprintf('Pliki z biblioteki: %d', count($used)));
+            }
+            if ($this->markdown->isEnabled()) {
+                $log(sprintf('Markdown: %d stron', $markdownCount));
+            }
+            if ($this->markdown->hasLlmsTxt() && !isset($pages[LlmsTxt::PATH]) && !isset($files[LlmsTxt::PATH])) {
+                $this->fs->dumpFile($dir . '/' . LlmsTxt::PATH, $this->markdown->llmsTxt($home, $markdown));
+                $log(sprintf('llms.txt: %d stron', count($markdown)));
+            }
 
             $endpoints = $this->state->usedEndpoints();
             if ($endpoints !== []) {
@@ -130,10 +177,15 @@ final readonly class SiteBuilder
         }
 
         $file = $dir . '/.htaccess';
-        if (!$this->htaccess || ($redirects === [] && !$hasEndpoints && !is_file($file))) {
+        if (!$this->htaccess || ($redirects === [] && !$hasEndpoints && !$this->paths->cleanUrls() && !is_file($file))) {
             return;
         }
-        $block = Htaccess::block($redirects, $this->paths, $hasEndpoints ? $this->endpointPrefix : null);
+        $block = Htaccess::block(
+            $redirects,
+            $this->paths,
+            $hasEndpoints ? $this->endpointPrefix : null,
+            $this->markdown->isEnabled(),
+        );
         $this->fs->dumpFile($file, Htaccess::merge(is_file($file) ? (string) file_get_contents($file) : '', $block));
     }
 }

@@ -12,8 +12,8 @@ use Byfareska\StaticSite\Redirect\Redirect;
 use Byfareska\StaticSite\Redirect\RedirectProvider;
 
 /**
- * The home page, a page with the contact form (only while $withContact) and a moved article; $scheduledAt: a change
- * to come (an article dated ahead).
+ * The home page, two articles, a page without a Markdown version, a gallery of uploaded files (Uploads), a page
+ * with the contact form (only while $withContact) and a moved article; $scheduledAt: a change to come (an article dated ahead).
  */
 final class Pages implements PageProvider, RedirectProvider, SchedulesChanges
 {
@@ -25,6 +25,9 @@ final class Pages implements PageProvider, RedirectProvider, SchedulesChanges
     {
         yield new SitePage('index.html', 'home.html.twig', ['title' => 'Start']);
         yield new SitePage('artykuly/pierwszy.html', 'home.html.twig', ['title' => 'Pierwszy']);
+        yield new SitePage('artykuly/drugi.html', 'article.html.twig', ['title' => 'Drugi'], lastModified: new \DateTimeImmutable('2026-11-01'));
+        yield new SitePage('bez-markdown.html', 'home.html.twig', ['title' => 'Bez Markdown'], markdown: false);
+        yield new SitePage('galeria/index.html', 'gallery.html.twig', markdown: false);
         if ($this->withContact) {
             yield new SitePage('kontakt/index.html', 'contact.html.twig');
         }
